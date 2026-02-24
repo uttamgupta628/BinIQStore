@@ -475,12 +475,89 @@ const useStore = create(
           throw error;
         }
       },
+
+      // ✅ ADD THESE before the last closing }),
+recordScan: async (qrData, productName, category, image) => {
+  try {
+    const { accessToken } = useStore.getState();
+    if (!accessToken) throw new Error("Access token missing");
+
+    const response = await axios.post(
+      "http://192.168.29.162:3001/api/users/scan",
+      {
+        qr_data: qrData,
+        product_name: productName || qrData,
+        category: category || "Uncategorized",
+        image: image || null,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    console.log("Record scan response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Record scan error:", error.message);
+    throw error;
+  }
+},
+
+fetchScans: async () => {
+  try {
+    const { accessToken } = useStore.getState();
+    if (!accessToken) throw new Error("Access token missing");
+
+    const response = await axios.get(
+      "http://192.168.29.162:3001/api/users/scans",
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    console.log("Fetch scans response:", response.data);
+    return response.data; // { success, total_scans, scans_remaining, scans: [] }
+  } catch (error) {
+    console.error("Fetch scans error:", error.message);
+    throw error;
+  }
+},
+
+deleteScan: async (scanId) => {
+  try {
+    const { accessToken } = useStore.getState();
+    if (!accessToken) throw new Error("Access token missing");
+
+    const response = await axios.delete(
+      `http://192.168.29.162:3001/api/users/scans/${scanId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    console.log("Delete scan response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Delete scan error:", error.message);
+    throw error;
+  }
+},
     }),
     {
       name: "app-storage",
       storage: createJSONStorage(() => AsyncStorage),
     },
   ),
+  
 );
 
 export default useStore;
