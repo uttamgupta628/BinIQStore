@@ -7,7 +7,6 @@ import {
   ScrollView,
   TouchableOpacity,
   FlatList,
-  Dimensions,
   ImageBackground,
   StatusBar,
   Pressable,
@@ -22,13 +21,23 @@ import {
   widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
-import { Star, Heart, X, Package, Tag, Calendar, QrCode, Trash2 } from "lucide-react-native";
+import {
+  Star,
+  Heart,
+  X,
+  Package,
+  Tag,
+  Calendar,
+  QrCode,
+  Trash2,
+  AlertCircle,
+} from "lucide-react-native";
 import SearchIcon from "../../../assets/SearchIcon.svg";
 import Filter_NewIcon from "../../../assets/Filter_NewIcon.svg";
 import PieGraph from "../../../assets/PieGraph.svg";
 import Graph from "../../../assets/Graph.svg";
 
-import useStore from "../../store"; 
+import useStore from "../../store";
 
 // ─────────────────────────────────────────────
 // SCAN DETAIL MODAL
@@ -141,7 +150,8 @@ const ScanDetailModal = ({ visible, scan, onClose, onDelete }) => {
 const ScanHistoryScreen = () => {
   const navigation = useNavigation();
 
-  // ✅ Pull actions directly from Zustand store
+  // ✅ Subscribe to accessToken directly so component re-renders when it loads
+  const accessToken = useStore((state) => state.accessToken);
   const fetchScans = useStore((state) => state.fetchScans);
   const deleteScan = useStore((state) => state.deleteScan);
 
@@ -152,28 +162,46 @@ const ScanHistoryScreen = () => {
   const [scansRemaining, setScansRemaining] = useState(100);
   const [selectedScan, setSelectedScan] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [authError, setAuthError] = useState(false);
 
-  const loadScans = useCallback(async (isRefresh = false) => {
-    try {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-
-      const result = await fetchScans();
-
-      if (result?.success) {
-        setScans(result.scans || []);
-        setTotalScans(result.total_scans || 0);
-        setScansRemaining(result.scans_remaining ?? 100);
+  const loadScans = useCallback(
+    async (isRefresh = false) => {
+      // ✅ Guard: don't even try if token isn't ready yet
+      if (!accessToken) {
+        console.warn("loadScans: no accessToken yet, skipping fetch");
+        setLoading(false);
+        setAuthError(true);
+        return;
       }
-    } catch (error) {
-      console.error("Load scans error:", error);
-      Alert.alert("Error", "Failed to load scans. Please try again.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [fetchScans]);
 
+      setAuthError(false);
+      try {
+        if (isRefresh) setRefreshing(true);
+        else setLoading(true);
+
+        const result = await fetchScans();
+
+        if (result?.success) {
+          setScans(result.data || []);
+          setTotalScans(result.data?.length || 0);
+          setScansRemaining(100 - (result.data?.length || 0));
+        }
+      } catch (error) {
+        console.error("Load scans error:", error);
+        if (error?.response?.status === 401) {
+          setAuthError(true);
+        } else {
+          Alert.alert("Error", "Failed to load scans. Please try again.");
+        }
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [accessToken, fetchScans],
+  );
+
+  // ✅ Re-run whenever accessToken becomes available (handles rehydration delay)
   useEffect(() => {
     loadScans();
   }, [loadScans]);
@@ -195,18 +223,14 @@ const ScanHistoryScreen = () => {
   };
 
   const confirmDelete = (scanId) => {
-    Alert.alert(
-      "Delete Scan",
-      "Are you sure you want to remove this scan?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => handleDeleteScan(scanId),
-        },
-      ]
-    );
+    Alert.alert("Delete Scan", "Are you sure you want to remove this scan?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => handleDeleteScan(scanId),
+      },
+    ]);
   };
 
   const openModal = (scan) => {
@@ -214,12 +238,11 @@ const ScanHistoryScreen = () => {
     setModalVisible(true);
   };
 
-  // Sort: recent first / oldest first
   const recentScans = [...scans].sort(
-    (a, b) => new Date(b.scanned_at) - new Date(a.scanned_at)
+    (a, b) => new Date(b.scanned_at) - new Date(a.scanned_at),
   );
   const oldestScans = [...scans].sort(
-    (a, b) => new Date(a.scanned_at) - new Date(b.scanned_at)
+    (a, b) => new Date(a.scanned_at) - new Date(b.scanned_at),
   );
 
   const renderScanCard = ({ item }) => (
@@ -249,12 +272,9 @@ const ScanHistoryScreen = () => {
       </Text>
 
       <Text style={scanStyles.dateText}>
-        {item.scanned_at
-          ? new Date(item.scanned_at).toLocaleDateString()
-          : "—"}
+        {item.scanned_at ? new Date(item.scanned_at).toLocaleDateString() : "—"}
       </Text>
 
-      {/* Trash icon bottom-right */}
       <TouchableOpacity
         style={styles.heartButton}
         onPress={() => confirmDelete(item.scan_id)}
@@ -264,10 +284,41 @@ const ScanHistoryScreen = () => {
     </TouchableOpacity>
   );
 
+  // ── AUTH ERROR STATE ──
+  if (authError) {
+    return (
+      <View style={scanStyles.emptyContainer}>
+        <AlertCircle size={48} color="#E53935" />
+        <Text style={[scanStyles.emptyTitle, { color: "#E53935" }]}>
+          Session Expired
+        </Text>
+        <Text style={scanStyles.emptySubtitle}>
+          Please log out and log back in to view your scans.
+        </Text>
+        <TouchableOpacity
+          style={[styles.gettingStarted, { marginTop: hp(2), width: "70%" }]}
+          onPress={() => loadScans()}
+        >
+          <Text
+            style={{
+              color: "#fff",
+              fontFamily: "Nunito-SemiBold",
+              fontSize: hp(1.9),
+            }}
+          >
+            Retry
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={{ width: "100%" }}>
       {/* Search Bar */}
-      <View style={{ width: "95%", alignSelf: "center", marginVertical: "2%" }} />
+      <View
+        style={{ width: "95%", alignSelf: "center", marginVertical: "2%" }}
+      />
       <View style={{ ...styles.searchParent, marginBottom: "4%" }}>
         <Pressable style={styles.searchContainer}>
           <View style={styles.cameraButton}>
@@ -305,7 +356,13 @@ const ScanHistoryScreen = () => {
 
       {/* Graph Card */}
       <View style={styles.graphCard}>
-        <Text style={{ fontSize: wp(3.7), color: "#130160", fontFamily: "Nunito-Bold" }}>
+        <Text
+          style={{
+            fontSize: wp(3.7),
+            color: "#130160",
+            fontFamily: "Nunito-Bold",
+          }}
+        >
           VIEWS
         </Text>
         <Graph width={"98%"} height={"90%"} />
@@ -316,46 +373,125 @@ const ScanHistoryScreen = () => {
         style={styles.gettingStarted}
         onPress={() => navigation.navigate("UploadScreen")}
       >
-        <Text style={{ fontFamily: "Nunito-SemiBold", color: "#fff", fontSize: hp(2) }}>
+        <Text
+          style={{
+            fontFamily: "Nunito-SemiBold",
+            color: "#fff",
+            fontSize: hp(2),
+          }}
+        >
           Upload New Content
         </Text>
       </TouchableOpacity>
 
       {/* Pie Chart */}
       <View style={{ height: hp(38), flexDirection: "row" }}>
-        <View style={{ width: "72%", justifyContent: "space-around", alignItems: "center" }}>
+        <View
+          style={{
+            width: "72%",
+            justifyContent: "space-around",
+            alignItems: "center",
+          }}
+        >
           <View style={{ width: "80%" }}>
-            <Text style={{ color: "#130160", fontFamily: "Nunito-SemiBold", fontSize: hp(2), textDecorationLine: "underline" }}>
+            <Text
+              style={{
+                color: "#130160",
+                fontFamily: "Nunito-SemiBold",
+                fontSize: hp(2),
+                textDecorationLine: "underline",
+              }}
+            >
               UPLOADS CATEGORY
             </Text>
           </View>
-          <View><PieGraph /></View>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", width: "90%" }}>
+          <View>
+            <PieGraph />
+          </View>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              width: "90%",
+            }}
+          >
             {[
               { color: "#0049AF", label: "Category 1" },
               { color: "#FFBB36", label: "Category 2" },
               { color: "#70B6C1", label: "Category 3" },
             ].map((c, i) => (
-              <View key={i} style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={{ width: wp(4), height: hp(1.2), backgroundColor: c.color, borderRadius: 3 }} />
-                <Text style={{ color: "#000", fontSize: hp(1.4) }}> {c.label}</Text>
+              <View
+                key={i}
+                style={{ flexDirection: "row", alignItems: "center" }}
+              >
+                <View
+                  style={{
+                    width: wp(4),
+                    height: hp(1.2),
+                    backgroundColor: c.color,
+                    borderRadius: 3,
+                  }}
+                />
+                <Text style={{ color: "#000", fontSize: hp(1.4) }}>
+                  {" "}
+                  {c.label}
+                </Text>
               </View>
             ))}
           </View>
         </View>
-        <View style={{ width: "28%", height: "60%", alignSelf: "center", justifyContent: "space-between" }}>
+        <View
+          style={{
+            width: "28%",
+            height: "60%",
+            alignSelf: "center",
+            justifyContent: "space-between",
+          }}
+        >
           {[
             { color: "#0049AF", label: "Category 1" },
             { color: "#70B6C1", label: "Category 2" },
             { color: "#6F19C2", label: "Category 3" },
           ].map((c, i) => (
-            <View key={i} style={{ height: "18%", width: "100%", paddingRight: "4%" }}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                <View style={{ width: 13, height: 13, backgroundColor: c.color, borderRadius: 20 }} />
-                <Text style={{ color: "gray", fontSize: hp(1.9) }}>{c.label}</Text>
+            <View
+              key={i}
+              style={{ height: "18%", width: "100%", paddingRight: "4%" }}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <View
+                  style={{
+                    width: 13,
+                    height: 13,
+                    backgroundColor: c.color,
+                    borderRadius: 20,
+                  }}
+                />
+                <Text style={{ color: "gray", fontSize: hp(1.9) }}>
+                  {c.label}
+                </Text>
               </View>
-              <View style={{ width: "68%", alignSelf: "flex-end", paddingVertical: "1%" }}>
-                <Text style={{ color: "#000", fontWeight: "600", fontSize: hp(2.2) }}>45%</Text>
+              <View
+                style={{
+                  width: "68%",
+                  alignSelf: "flex-end",
+                  paddingVertical: "1%",
+                }}
+              >
+                <Text
+                  style={{
+                    color: "#000",
+                    fontWeight: "600",
+                    fontSize: hp(2.2),
+                  }}
+                >
+                  45%
+                </Text>
               </View>
             </View>
           ))}
@@ -406,7 +542,9 @@ const ScanHistoryScreen = () => {
         <>
           <View style={scanStyles.sectionHeader}>
             <Text style={scanStyles.sectionTitle}>OLDEST SCANS</Text>
-            <Text style={scanStyles.sectionCount}>{oldestScans.length} items</Text>
+            <Text style={scanStyles.sectionCount}>
+              {oldestScans.length} items
+            </Text>
           </View>
           <View style={{ flex: 1, width: "100%", marginBottom: "10%" }}>
             <FlatList
@@ -417,7 +555,15 @@ const ScanHistoryScreen = () => {
               showsVerticalScrollIndicator={false}
               scrollEnabled={false}
             />
-            <Text style={{ color: "#524B6B", fontSize: hp(1.9), textDecorationLine: "underline", textAlign: "center", marginVertical: "7%" }}>
+            <Text
+              style={{
+                color: "#524B6B",
+                fontSize: hp(1.9),
+                textDecorationLine: "underline",
+                textAlign: "center",
+                marginVertical: "7%",
+              }}
+            >
               View Details
             </Text>
           </View>
@@ -441,8 +587,14 @@ const ScanHistoryScreen = () => {
 const MyItemsScreen = () => {
   const navigation = useNavigation();
   const renderItem = ({ item }) => (
-    <TouchableOpacity style={styles.card} onPress={() => navigation.navigate("SinglePageItem")}>
-      <Image source={require("../../../assets/dummy_product.png")} style={styles.image} />
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => navigation.navigate("SinglePageItem")}
+    >
+      <Image
+        source={require("../../../assets/dummy_product.png")}
+        style={styles.image}
+      />
       <Text style={styles.name}>{item.name}</Text>
       <Text style={styles.subtitle}>{item.subtitle}</Text>
       <View style={styles.ratingContainer}>
@@ -450,21 +602,35 @@ const MyItemsScreen = () => {
         <Text style={styles.rating}>{item.rating}</Text>
         <Text style={styles.reviews}>{item.reviews} Reviews</Text>
       </View>
-      <TouchableOpacity style={styles.heartButton}><Heart size={13} color="red" /></TouchableOpacity>
+      <TouchableOpacity style={styles.heartButton}>
+        <Heart size={13} color="red" />
+      </TouchableOpacity>
     </TouchableOpacity>
   );
   return (
     <View style={{ width: "100%" }}>
-      <View style={{ width: "95%", alignSelf: "center", marginVertical: "2%" }} />
+      <View
+        style={{ width: "95%", alignSelf: "center", marginVertical: "2%" }}
+      />
       <View style={{ ...styles.searchParent, marginBottom: "4%" }}>
         <Pressable style={styles.searchContainer}>
-          <View style={styles.cameraButton}><SearchIcon /></View>
+          <View style={styles.cameraButton}>
+            <SearchIcon />
+          </View>
           <Text style={styles.input}>search for anything</Text>
         </Pressable>
-        <TouchableOpacity style={styles.menuButton}><Filter_NewIcon /></TouchableOpacity>
+        <TouchableOpacity style={styles.menuButton}>
+          <Filter_NewIcon />
+        </TouchableOpacity>
       </View>
       <TouchableOpacity style={styles.gettingStarted}>
-        <Text style={{ fontFamily: "Nunito-SemiBold", color: "#fff", fontSize: hp(2) }}>
+        <Text
+          style={{
+            fontFamily: "Nunito-SemiBold",
+            color: "#fff",
+            fontSize: hp(2),
+          }}
+        >
           Create New Promotion
         </Text>
       </TouchableOpacity>
@@ -489,8 +655,14 @@ const AllTotalScans = () => {
   const navigation = useNavigation();
   const [active, setActive] = useState(false);
   const renderItem = ({ item }) => (
-    <TouchableOpacity style={styles.card} onPress={() => navigation.navigate("PromotionScreen")}>
-      <Image source={require("../../../assets/dummy_product.png")} style={styles.image} />
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => navigation.navigate("PromotionScreen")}
+    >
+      <Image
+        source={require("../../../assets/dummy_product.png")}
+        style={styles.image}
+      />
       <Text style={styles.name}>{item.name}</Text>
       <Text style={styles.subtitle}>{item.subtitle}</Text>
       <View style={styles.ratingContainer}>
@@ -498,26 +670,68 @@ const AllTotalScans = () => {
         <Text style={styles.rating}>{item.rating}</Text>
         <Text style={styles.reviews}>{item.reviews} Reviews</Text>
       </View>
-      <TouchableOpacity style={styles.heartButton}><Heart size={13} color="red" /></TouchableOpacity>
+      <TouchableOpacity style={styles.heartButton}>
+        <Heart size={13} color="red" />
+      </TouchableOpacity>
     </TouchableOpacity>
   );
   return (
     <View style={{ width: "100%" }}>
       <View style={{ width: "95%", alignSelf: "center", marginVertical: "5%" }}>
-        <View style={{ flexDirection: "row", width: "100%", height: 50, backgroundColor: "#DDF4F3", borderRadius: 5 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            width: "100%",
+            height: 50,
+            backgroundColor: "#DDF4F3",
+            borderRadius: 5,
+          }}
+        >
           <TouchableOpacity
-            style={{ flex: 1, justifyContent: "center", alignItems: "center", borderRadius: 5, margin: 5, backgroundColor: active ? "#FFFFFF" : "transparent", elevation: active ? 3 : 0 }}
+            style={{
+              flex: 1,
+              justifyContent: "center",
+              alignItems: "center",
+              borderRadius: 5,
+              margin: 5,
+              backgroundColor: active ? "#FFFFFF" : "transparent",
+              elevation: active ? 3 : 0,
+            }}
             onPress={() => setActive(true)}
           >
-            <Text style={{ fontFamily: "Nunito-Regular", fontSize: 14, color: "#000", fontWeight: active ? "600" : "normal", opacity: active ? 1 : 0.6 }}>
+            <Text
+              style={{
+                fontFamily: "Nunito-Regular",
+                fontSize: 14,
+                color: "#000",
+                fontWeight: active ? "600" : "normal",
+                opacity: active ? 1 : 0.6,
+              }}
+            >
               Active Promotions
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={{ flex: 1, justifyContent: "center", alignItems: "center", borderRadius: 5, margin: 5, backgroundColor: !active ? "#FFFFFF" : "transparent", elevation: !active ? 3 : 0 }}
+            style={{
+              flex: 1,
+              justifyContent: "center",
+              alignItems: "center",
+              borderRadius: 5,
+              margin: 5,
+              backgroundColor: !active ? "#FFFFFF" : "transparent",
+              elevation: !active ? 3 : 0,
+            }}
             onPress={() => setActive(false)}
           >
-            <Text style={{ fontFamily: "Nunito-Regular", fontSize: 14, color: !active ? "red" : "#000", fontWeight: !active ? "600" : "normal", opacity: !active ? 1 : 0.6 }}>
+            <Text
+              style={{
+                fontFamily: "Nunito-Regular",
+                fontSize: 14,
+                color: !active ? "red" : "#000",
+                fontWeight: !active ? "600" : "normal",
+                opacity: !active ? 1 : 0.6,
+              }}
+            >
               Expired Promotions
             </Text>
           </TouchableOpacity>
@@ -536,7 +750,13 @@ const AllTotalScans = () => {
           style={styles.gettingStarted}
           onPress={() => navigation.navigate("NewPromotionScreen")}
         >
-          <Text style={{ fontFamily: "Nunito-SemiBold", color: "#fff", fontSize: hp(2) }}>
+          <Text
+            style={{
+              fontFamily: "Nunito-SemiBold",
+              color: "#fff",
+              fontSize: hp(2),
+            }}
+          >
             Create New Promotion
           </Text>
         </TouchableOpacity>
@@ -563,13 +783,16 @@ const MyLibrary = () => {
         <View style={styles.header}>
           <View style={styles.headerChild}>
             <Pressable onPress={() => navigation.goBack()}>
-              <MaterialIcons name="arrow-back-ios" color={"#0D0D26"} size={25} />
+              <MaterialIcons
+                name="arrow-back-ios"
+                color={"#0D0D26"}
+                size={25}
+              />
             </Pressable>
             <Text style={styles.headerText}>My Library</Text>
           </View>
         </View>
 
-        {/* Tabs */}
         <View style={styles.tabContainer}>
           {[
             { key: "scan", label: "Feed" },
@@ -581,14 +804,18 @@ const MyLibrary = () => {
               style={[styles.tab, activeTab === tab.key && styles.activeTab]}
               onPress={() => setActiveTab(tab.key)}
             >
-              <Text style={[styles.tabText, activeTab === tab.key && styles.activeTabText]}>
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === tab.key && styles.activeTabText,
+                ]}
+              >
                 {tab.label}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Content */}
         <ScrollView style={styles.content}>
           {activeTab === "scan" && <ScanHistoryScreen />}
           {activeTab === "items" && <MyItemsScreen />}
@@ -603,12 +830,48 @@ const MyLibrary = () => {
 // STATIC DATA
 // ─────────────────────────────────────────────
 const products = [
-  { id: "1", name: "TMA-2 HD Wireless", subtitle: "Hidden Finds", rating: 4.8, reviews: 88 },
-  { id: "2", name: "TMA-2 HD Wireless", subtitle: "ANC Store", rating: 4.8, reviews: 88 },
-  { id: "3", name: "TMA-2 HD Wireless", subtitle: "Hidden Finds", rating: 4.8, reviews: 88 },
-  { id: "4", name: "TMA-2 HD Wireless", subtitle: "ANC Store", rating: 4.8, reviews: 88 },
-  { id: "5", name: "TMA-2 HD Wireless", subtitle: "Best Sells Store", rating: 4.8, reviews: 88 },
-  { id: "6", name: "TMA-2 HD Wireless", subtitle: "ANC Store", rating: 4.8, reviews: 88 },
+  {
+    id: "1",
+    name: "TMA-2 HD Wireless",
+    subtitle: "Hidden Finds",
+    rating: 4.8,
+    reviews: 88,
+  },
+  {
+    id: "2",
+    name: "TMA-2 HD Wireless",
+    subtitle: "ANC Store",
+    rating: 4.8,
+    reviews: 88,
+  },
+  {
+    id: "3",
+    name: "TMA-2 HD Wireless",
+    subtitle: "Hidden Finds",
+    rating: 4.8,
+    reviews: 88,
+  },
+  {
+    id: "4",
+    name: "TMA-2 HD Wireless",
+    subtitle: "ANC Store",
+    rating: 4.8,
+    reviews: 88,
+  },
+  {
+    id: "5",
+    name: "TMA-2 HD Wireless",
+    subtitle: "Best Sells Store",
+    rating: 4.8,
+    reviews: 88,
+  },
+  {
+    id: "6",
+    name: "TMA-2 HD Wireless",
+    subtitle: "ANC Store",
+    rating: 4.8,
+    reviews: 88,
+  },
 ];
 
 // ─────────────────────────────────────────────
@@ -869,9 +1132,23 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   image: { width: "100%", marginBottom: 10 },
-  name: { fontSize: hp(1.36), marginBottom: 4, color: "#000", fontFamily: "DMSans-SemiBold" },
-  subtitle: { fontSize: hp(1.5), color: "#14BA9C", fontFamily: "DMSans-SemiBold", marginBottom: "8%" },
-  ratingContainer: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
+  name: {
+    fontSize: hp(1.36),
+    marginBottom: 4,
+    color: "#000",
+    fontFamily: "DMSans-SemiBold",
+  },
+  subtitle: {
+    fontSize: hp(1.5),
+    color: "#14BA9C",
+    fontFamily: "DMSans-SemiBold",
+    marginBottom: "8%",
+  },
+  ratingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
   rating: { fontSize: hp(1.3), fontWeight: "bold", color: "#000" },
   reviews: { marginLeft: 4, fontSize: hp(1.2), color: "#666" },
   heartButton: {
@@ -881,7 +1158,11 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 5,
   },
-  searchParent: { flexDirection: "row", alignItems: "center", marginHorizontal: "3%" },
+  searchParent: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: "3%",
+  },
   searchContainer: {
     flex: 1,
     flexDirection: "row",
@@ -894,7 +1175,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#F2F2F2",
   },
   cameraButton: { padding: 10 },
-  input: { flex: 1, fontSize: hp(2.2), fontFamily: "Nunito-Regular", paddingVertical: 8, color: "#999" },
+  input: {
+    flex: 1,
+    fontSize: hp(2.2),
+    fontFamily: "Nunito-Regular",
+    paddingVertical: 8,
+    color: "#999",
+  },
   menuButton: {
     backgroundColor: "#130160",
     padding: 10,

@@ -3,6 +3,9 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 
+// ✅ Single source of truth — Express backend only
+const BASE_URL = "http://192.168.29.162:3001/api";
+
 const useStore = create(
   persist(
     (set) => ({
@@ -14,43 +17,127 @@ const useStore = create(
       user: null,
       product: null,
       store: null,
-      notifications: { todays: [], yesturdays: [], olders: [] },
+      notifications: [],
+
+      // ─────────────────────────────────────────
+      // AUTH
+      // ─────────────────────────────────────────
+
+      // ✅ POST /api/users/login
       login: async ({ email, password }) => {
         try {
-          console.log(
-            "Login API call:",
-            `https://api.biniq.net/api/users/login`,
-          );
+          console.log("Login API call:", `${BASE_URL}/users/login`);
           const response = await axios.post(
-            `https://api.biniq.net/api/users/login`,
+            `${BASE_URL}/users/login`,
             { email, password },
+            { headers: { "Content-Type": "application/json" } },
           );
           const data = response.data;
-          console.log("Login response:", data);
-          if (!data.access) {
+
+          console.log("=== FULL LOGIN RESPONSE ===", JSON.stringify(data));
+          console.log("=== KEYS ===", Object.keys(data));
+
+          // Express userController login returns: { token, user_details }
+          const token =
+            data.token ||
+            data.access ||
+            data.accessToken ||
+            data.access_token ||
+            data.key;
+
+          const user =
+            data.user_details ||
+            data.user ||
+            data.data ||
+            data;
+
+          if (!token) {
+            console.error("No token found in response:", Object.keys(data));
             throw new Error(data.message || "Login failed");
           }
-          set({
-            user: data.user,
-            accessToken: data.access,
-            refreshToken: data.refresh,
-          });
+
+          console.log("✅ Token found:", token.substring(0, 20) + "...");
+          console.log("✅ User:", JSON.stringify(user));
+
+          set({ user, accessToken: token });
           return data;
         } catch (error) {
           console.error("Login error:", error.message);
+          if (error.response) {
+            console.error("Response data:", error.response.data);
+            console.error("Response status:", error.response.status);
+          }
           throw new Error(
-            error.response?.data?.message || error.message || "Login failed",
+            error.response?.data?.message ||
+              error.response?.data?.detail ||
+              error.message ||
+              "Login failed",
           );
         }
       },
+
+      logout: () => {
+        set({
+          user: null,
+          product: null,
+          store: null,
+          accessToken: null,
+          notifications: [],
+        });
+      },
+
+      // ✅ POST /api/users/register
+      signup: async ({
+        full_name,
+        email,
+        phone_number,
+        address,
+        store_name,
+        password,
+        confirm_password,
+        role,
+      }) => {
+        try {
+          console.log("Signup API call:", `${BASE_URL}/users/register`);
+          const response = await axios.post(
+            `${BASE_URL}/users/register`,
+            {
+              full_name,
+              email,
+              phone_number,
+              address,
+              store_name,
+              password,
+              confirm_password,
+              role,
+            },
+            { headers: { "Content-Type": "application/json" } },
+          );
+          const data = response.data;
+          console.log("Signup response:", data);
+          return data;
+        } catch (error) {
+          console.error("Signup error:", error.message);
+          if (error.response) {
+            console.error("Response data:", error.response.data);
+            console.error("Response status:", error.response.status);
+          }
+          throw new Error(
+            error.response?.data?.message ||
+              error.response?.data?.error ||
+              Object.values(error.response?.data || {})?.[0]?.[0] ||
+              error.message ||
+              "Signup failed",
+          );
+        }
+      },
+
+      // ✅ POST /api/users/forgot-password
       forgotPassword: async ({ email }) => {
         try {
-          console.log(
-            "Forgot Password API call:",
-            `https://api.biniq.net/api/users/forgot-password`,
-          );
+          console.log("Forgot Password API call:", `${BASE_URL}/users/forgot-password`);
           const response = await axios.post(
-            `https://api.biniq.net/api/users/forgot-password`, // ✅ correct endpoint
+            `${BASE_URL}/users/forgot-password`,
             { email },
             { headers: { "Content-Type": "application/json" } },
           );
@@ -65,37 +152,37 @@ const useStore = create(
           }
           throw new Error(
             error.response?.data?.message ||
-              Object.values(error.response?.data || {})?.[0]?.[0] ||
+              error.response?.data?.error ||
               error.message ||
               "Request failed",
           );
         }
       },
-      logout: () => {
-        set({ user: null, product: null });
-      },
+
+      // ─────────────────────────────────────────
+      // PRODUCTS
+      // ─────────────────────────────────────────
+
+      // ✅ GET /api/products/:product_id
       fetchProductById: async (productId) => {
         try {
-          const { user } = useStore.getState();
-          if (!user || !user.api_key) {
-            throw new Error("User not logged in or API key missing");
-          }
-          const response = await axios.post(
-            `https://binq.paywin24.com/api/get-product-by-id`,
-            { product_id: productId },
+          const { accessToken } = useStore.getState();
+          if (!accessToken) throw new Error("Access token missing");
+
+          console.log("Fetching product by ID:", productId);
+          const response = await axios.get(
+            `${BASE_URL}/products/${productId}`,
             {
               headers: {
-                apiToken: user.api_key,
+                Authorization: `Bearer ${accessToken}`,
                 "Content-Type": "application/json",
               },
             },
           );
           const data = response.data;
-          if (!data.success) {
-            throw new Error(data.message || "Failed to fetch product");
-          }
-          set({ product: data.product });
-          return data.product;
+          console.log("Fetch product by ID response:", data);
+          set({ product: data });
+          return data;
         } catch (error) {
           console.error("Fetch product by ID error:", error.message);
           if (error.response) {
@@ -105,20 +192,19 @@ const useStore = create(
           throw error;
         }
       },
+
+      // ✅ GET /api/categories
       fetchCategories: async () => {
         try {
           const { accessToken } = useStore.getState();
           if (!accessToken) throw new Error("Access token missing.");
 
-          const response = await axios.get(
-            `https://api.biniq.net/api/products/AddCategory`,
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type": "application/json",
-              },
+          const response = await axios.get(`${BASE_URL}/categories`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
             },
-          );
+          });
 
           const data = response.data;
           console.log("Categories response:", data);
@@ -126,7 +212,7 @@ const useStore = create(
           const cats = data.results || data.categories || data || [];
           return cats.map((cat) => ({
             label: cat.name || cat.category_name,
-            value: cat.id,
+            value: cat.id || cat._id,
           }));
         } catch (error) {
           console.error("Fetch categories error:", error.message);
@@ -138,31 +224,25 @@ const useStore = create(
         }
       },
 
+      // ✅ POST /api/products
       addProduct: async (productData) => {
         try {
           const { accessToken } = useStore.getState();
           if (!accessToken) throw new Error("Access token missing.");
 
-          console.log("Adding product...");
-          console.log("Payload:", {
+          const payload = {
             name: productData.title,
             description: productData.description,
             category: productData.category_id,
             price: productData.price,
             quantity: productData.quantity,
             images: productData.pic ? [productData.pic] : [],
-          });
+          };
+          console.log("Adding product, payload:", payload);
 
           const response = await axios.post(
-            `https://api.biniq.net/api/products/products`,
-            {
-              name: productData.title,
-              description: productData.description,
-              category: productData.category_id,
-              price: productData.price,
-              quantity: productData.quantity,
-              images: productData.pic ? [productData.pic] : [],
-            },
+            `${BASE_URL}/products`,
+            payload,
             {
               headers: {
                 Authorization: `Bearer ${accessToken}`,
@@ -170,7 +250,6 @@ const useStore = create(
               },
             },
           );
-
           const data = response.data;
           console.log("Add product response:", data);
           return data;
@@ -183,102 +262,34 @@ const useStore = create(
           throw error;
         }
       },
-      fetchStoreDetails: async () => {
-        try {
-          const { user } = useStore.getState();
-          if (!user || !user.api_key) {
-            throw new Error("User not logged in or API key missing");
-          }
-          const response = await axios.post(
-            `https://binq.paywin24.com/api/get-store-details`,
-            {},
-            {
-              headers: {
-                apiToken: user.api_key,
-                "Content-Type": "application/json",
-              },
-            },
-          );
-          const data = response.data;
-          if (!data.success) {
-            throw new Error(data.message || "Failed to fetch store details");
-          }
-          set({ store: data.store });
-          await AsyncStorage.setItem(
-            "store-details",
-            JSON.stringify(data.store),
-          );
-          return data.store;
-        } catch (error) {
-          console.error("Fetch store details error:", error.message);
-          if (error.response) {
-            console.error("Response data:", error.response.data);
-            console.error("Response status:", error.response.status);
-          }
-          throw error;
-        }
-      },
-      saveStoreDetails: async (storeData) => {
-        try {
-          const { user } = useStore.getState();
-          if (!user || !user.api_key) {
-            throw new Error("User not logged in or API key missing");
-          }
-          const response = await axios.post(
-            `https://binq.paywin24.com/api/add-store-details`,
-            storeData,
-            {
-              headers: {
-                apiToken: user.api_key,
-                "Content-Type": "application/json",
-              },
-            },
-          );
-          const data = response.data;
-          if (data.success) {
-            await AsyncStorage.setItem(
-              "store-details",
-              JSON.stringify(data.store),
-            );
-          }
-          return data;
-        } catch (error) {
-          console.error("Save store details error:", error.message);
-          throw error;
-        }
-      },
+
+      // ✅ GET /api/products/trending
       fetchTrendingProducts: async () => {
         try {
           const { accessToken } = useStore.getState();
           if (!accessToken) throw new Error("Access token missing");
 
           console.log("Fetching trending products...");
-          const response = await axios.get(
-            "https://api.biniq.net/api/products/trending",
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type": "application/json",
-              },
+          const response = await axios.get(`${BASE_URL}/products/trending`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
             },
-          );
+          });
 
           const data = response.data;
           console.log("Trending products response:", data);
 
-          // adjust mapping based on actual API response shape
           const products = data.results || data.products || data || [];
           return products.map((item) => ({
-            id: item.id,
+            id: item._id || item.id,
             image: item.images?.[0] ? { uri: item.images[0] } : null,
             title: item.name || item.title,
             description: item.description,
             discountPrice: `$${item.offer_price || item.price}`,
             originalPrice: `$${item.price}`,
             totalDiscount: item.offer_price
-              ? `${
-                  100 - Math.round((item.offer_price / item.price) * 100)
-                }% off`
+              ? `${100 - Math.round((item.offer_price / item.price) * 100)}% off`
               : "",
           }));
         } catch (error) {
@@ -291,28 +302,26 @@ const useStore = create(
         }
       },
 
+      // ✅ GET /api/products/activity
       fetchActivityFeed: async () => {
         try {
           const { accessToken } = useStore.getState();
           if (!accessToken) throw new Error("Access token missing");
 
           console.log("Fetching activity feed...");
-          const response = await axios.get(
-            "https://api.biniq.net/api/products/activity",
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type": "application/json",
-              },
+          const response = await axios.get(`${BASE_URL}/products/activity`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
             },
-          );
+          });
 
           const data = response.data;
           console.log("Activity feed response:", data);
 
           const products = data.results || data.products || data || [];
           return products.map((item) => ({
-            id: item.id,
+            id: item._id || item.id,
             image: item.images?.[0] ? { uri: item.images[0] } : null,
             title: item.name || item.title,
             description: item.description,
@@ -330,28 +339,28 @@ const useStore = create(
         }
       },
 
+      // ✅ GET /api/promotions
       fetchPromotions: async () => {
         try {
           const { accessToken } = useStore.getState();
           if (!accessToken) throw new Error("Access token missing");
 
           console.log("Fetching promotions...");
-          const response = await axios.get(
-            "https://api.biniq.net/api/promotions",
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type": "application/json",
-              },
+          const response = await axios.get(`${BASE_URL}/promotions`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
             },
-          );
+          });
 
           const data = response.data;
           console.log("Promotions response:", data);
 
-          const promotions = data.results || data.promotions || data || [];
+          // Express returns: { success: true, data: [] }
+          const promotions = data.data || data.results || data.promotions || (Array.isArray(data) ? data : []);
+
           return promotions.map((item) => ({
-            id: item.id,
+            id: item._id || item.id,
             image: item.images?.[0] ? { uri: item.images[0] } : null,
             title: item.title || item.name,
             shortDescription: item.description,
@@ -369,101 +378,104 @@ const useStore = create(
         }
       },
 
-      //  signup function
-      signup: async ({
-        full_name,
-        email,
-        phone_number,
-        address,
-        store_name,
-        password,
-        confirm_password,
-        role,
-      }) => {
-        try {
-          // Split full_name into first and last
-          const nameParts = full_name.trim().split(" ");
-          const first_name = nameParts[0] || "";
-          const last_name = nameParts.slice(1).join(" ") || "";
+      // ─────────────────────────────────────────
+      // STORE
+      // ─────────────────────────────────────────
 
-          console.log(
-            "Signup API call:",
-            `https://api.biniq.net/api/users/register`,
-          );
-          console.log("Signup payload:", {
-            first_name,
-            last_name,
-            email,
-            phone_number,
-            address,
-            store_name,
-            password,
-            confirm_password,
-            role,
+      // ✅ GET /api/stores/my-store
+      fetchStoreDetails: async () => {
+        try {
+          const { accessToken } = useStore.getState();
+          if (!accessToken) throw new Error("Access token missing");
+
+          console.log("Fetching store details...");
+          const response = await axios.get(`${BASE_URL}/stores/my-store`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
           });
 
-          const response = await axios.post(
-            `https://api.biniq.net/api/users/register`,
-            {
-              first_name, // ✅ send separately
-              last_name, // ✅ send separately
-              email,
-              phone_number,
-              address,
-              store_name,
-              password,
-              confirm_password,
-              role,
-            },
-            {
-              headers: { "Content-Type": "application/json" },
-            },
-          );
-
           const data = response.data;
-          console.log("Signup response:", data);
-
-          if (!data.email) {
-            throw new Error(data.message || "Signup failed");
-          }
-
-          set({ user: data });
+          console.log("Fetch store details response:", data);
+          set({ store: data });
+          await AsyncStorage.setItem("store-details", JSON.stringify(data));
           return data;
         } catch (error) {
-          console.error("Signup error:", error.message);
+          // 404 = user has not created a store yet — not a real crash
+          if (error.response?.status === 404) {
+            console.log("No store found for this user yet — skipping.");
+            set({ store: null });
+            return null;
+          }
+          console.error("Fetch store details error:", error.message);
           if (error.response) {
             console.error("Response data:", error.response.data);
             console.error("Response status:", error.response.status);
           }
-          throw new Error(
-            error.response?.data?.message ||
-              Object.values(error.response?.data || {})?.[0]?.[0] ||
-              error.message ||
-              "Signup failed",
-          );
+          throw error;
         }
       },
 
-      fetchNotifications: async () => {
+      // ✅ PUT /api/stores
+      saveStoreDetails: async (storeData) => {
         try {
-          const { user } = useStore.getState();
-          if (!user || !user.api_key) {
-            throw new Error("User not logged in or API key missing");
-          }
-          const response = await axios.post(
-            `https://binq.paywin24.com/api/notifiation`,
-            {},
+          const { accessToken, user } = useStore.getState();
+          if (!accessToken) throw new Error("Access token missing");
+
+          console.log("Saving store details...");
+          const response = await axios.put(
+            `${BASE_URL}/stores`,
+            { ...storeData, user_id: user._id || user.id },
             {
               headers: {
-                apiToken: user.api_key,
+                Authorization: `Bearer ${accessToken}`,
                 "Content-Type": "application/json",
               },
             },
           );
+
           const data = response.data;
-          if (!data.success) {
-            throw new Error(data.message || "Failed to fetch notifications");
+          console.log("Save store details response:", data);
+
+          if (data.store) {
+            set({ store: data.store });
+            await AsyncStorage.setItem(
+              "store-details",
+              JSON.stringify(data.store),
+            );
           }
+          return data;
+        } catch (error) {
+          console.error("Save store details error:", error.message);
+          if (error.response) {
+            console.error("Response data:", error.response.data);
+            console.error("Response status:", error.response.status);
+          }
+          throw error;
+        }
+      },
+
+      // ─────────────────────────────────────────
+      // NOTIFICATIONS
+      // ─────────────────────────────────────────
+
+      // ✅ GET /api/notifications
+      fetchNotifications: async () => {
+        try {
+          const { accessToken } = useStore.getState();
+          if (!accessToken) throw new Error("Access token missing");
+
+          console.log("Fetching notifications...");
+          const response = await axios.get(`${BASE_URL}/notifications`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          });
+
+          const data = response.data;
+          console.log("Fetch notifications response:", data);
           set({ notifications: data });
           return data;
         } catch (error) {
@@ -476,88 +488,131 @@ const useStore = create(
         }
       },
 
-      // ✅ ADD THESE before the last closing }),
-recordScan: async (qrData, productName, category, image) => {
-  try {
-    const { accessToken } = useStore.getState();
-    if (!accessToken) throw new Error("Access token missing");
+      // ✅ PUT /api/notifications/:notification_id/read
+      markNotificationRead: async (notificationId) => {
+        try {
+          const { accessToken } = useStore.getState();
+          if (!accessToken) throw new Error("Access token missing");
 
-    const response = await axios.post(
-      "http://192.168.29.162:3001/api/users/scan",
-      {
-        qr_data: qrData,
-        product_name: productName || qrData,
-        category: category || "Uncategorized",
-        image: image || null,
+          const response = await axios.put(
+            `${BASE_URL}/notifications/${notificationId}/read`,
+            {},
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+              },
+            },
+          );
+          console.log("Mark notification read response:", response.data);
+          return response.data;
+        } catch (error) {
+          console.error("Mark notification read error:", error.message);
+          if (error.response) {
+            console.error("Response data:", error.response.data);
+            console.error("Response status:", error.response.status);
+          }
+          throw error;
+        }
       },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
+
+      // ─────────────────────────────────────────
+      // SCANS — live under /api/users/ in Express
+      // ─────────────────────────────────────────
+
+      // ✅ GET /api/users/scans
+      fetchScans: async () => {
+        try {
+          const { accessToken } = useStore.getState();
+          console.log(
+            "fetchScans: accessToken =",
+            accessToken ? "✅ present" : "❌ MISSING",
+          );
+          if (!accessToken) throw new Error("Access token missing");
+
+          const response = await axios.get(`${BASE_URL}/users/scans`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          });
+          console.log("Fetch scans response:", response.data);
+          return response.data;
+        } catch (error) {
+          console.error("Fetch scans error:", error.message);
+          if (error.response) {
+            console.error("Response status:", error.response.status);
+            console.error("Response data:", error.response.data);
+          }
+          throw error;
+        }
       },
-    );
 
-    console.log("Record scan response:", response.data);
-    return response.data;
-  } catch (error) {
-    console.error("Record scan error:", error.message);
-    throw error;
-  }
-},
+      // ✅ POST /api/users/scan  (singular — that's the Express route)
+      recordScan: async (qrData, productName, category, image) => {
+        try {
+          const { accessToken } = useStore.getState();
+          if (!accessToken) throw new Error("Access token missing");
 
-fetchScans: async () => {
-  try {
-    const { accessToken } = useStore.getState();
-    if (!accessToken) throw new Error("Access token missing");
-
-    const response = await axios.get(
-      "http://192.168.29.162:3001/api/users/scans",
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
+          const response = await axios.post(
+            `${BASE_URL}/users/scan`,
+            {
+              qr_data: qrData,
+              product_name: productName || qrData,
+              category: category || "Uncategorized",
+              image: image || null,
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+              },
+            },
+          );
+          console.log("Record scan response:", response.data);
+          return response.data;
+        } catch (error) {
+          console.error("Record scan error:", error.message);
+          if (error.response) {
+            console.error("Response data:", error.response.data);
+            console.error("Response status:", error.response.status);
+          }
+          throw error;
+        }
       },
-    );
 
-    console.log("Fetch scans response:", response.data);
-    return response.data; // { success, total_scans, scans_remaining, scans: [] }
-  } catch (error) {
-    console.error("Fetch scans error:", error.message);
-    throw error;
-  }
-},
+      // ✅ DELETE /api/users/scans/:scan_id
+      deleteScan: async (scanId) => {
+        try {
+          const { accessToken } = useStore.getState();
+          if (!accessToken) throw new Error("Access token missing");
 
-deleteScan: async (scanId) => {
-  try {
-    const { accessToken } = useStore.getState();
-    if (!accessToken) throw new Error("Access token missing");
-
-    const response = await axios.delete(
-      `http://192.168.29.162:3001/api/users/scans/${scanId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
+          const response = await axios.delete(
+            `${BASE_URL}/users/scans/${scanId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+              },
+            },
+          );
+          console.log("Delete scan response:", response.data);
+          return response.data;
+        } catch (error) {
+          console.error("Delete scan error:", error.message);
+          if (error.response) {
+            console.error("Response data:", error.response.data);
+            console.error("Response status:", error.response.status);
+          }
+          throw error;
+        }
       },
-    );
-
-    console.log("Delete scan response:", response.data);
-    return response.data;
-  } catch (error) {
-    console.error("Delete scan error:", error.message);
-    throw error;
-  }
-},
     }),
     {
       name: "app-storage",
       storage: createJSONStorage(() => AsyncStorage),
     },
   ),
-  
 );
 
 export default useStore;

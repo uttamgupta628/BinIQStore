@@ -8,12 +8,12 @@ import {
   Dimensions,
   Pressable,
 } from "react-native";
-import { Circle } from "react-native-progress"; // For circular progress
+import { Circle } from "react-native-progress";
 import {
   heightPercentageToDP as hp,
   widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
-import Svg, { Line, Path } from "react-native-svg"; // For horizontal progress (e.g., Education Level)
+import Svg, { Line, Path } from "react-native-svg";
 import PieGraph from "../../Components/PieGraph";
 import { useNavigation } from "@react-navigation/native";
 import Graph from "../../../assets/Graph.svg";
@@ -27,13 +27,14 @@ const Dashboard3 = ({ percentage = 70 }) => {
   const circumference = radius * Math.PI;
   const { user } = useStore();
 
-  // Calculate the path for the semi-circle
+  
+  const displayName = user?.full_name || user?.name || "User";
+
   const semiCircle = `
       M ${strokeWidth / 2} ${center}
       A ${radius} ${radius} 0 0 1 ${size - strokeWidth / 2} ${center}
     `;
 
-  // Calculate the progress
   const progressLength = circumference * (percentage / 100);
   const strokeDasharray = `${progressLength} ${circumference}`;
   const navigation = useNavigation();
@@ -44,10 +45,10 @@ const Dashboard3 = ({ percentage = 70 }) => {
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.greeting}>
-            Welcome, <Text style={styles.name}>{user.name}</Text>
+            Welcome, <Text style={styles.name}>{displayName}</Text>
           </Text>
           <Text style={styles.subtext}>
-            Showcase your best content to highlight your store’s identity
+            Showcase your best content to highlight your store's identity
           </Text>
         </View>
       </View>
@@ -109,7 +110,6 @@ const Dashboard3 = ({ percentage = 70 }) => {
 
       {/* Bottom Cards */}
       <View style={styles.bottomCardsContainer}>
-        {/* Current Plan */}
         <View
           style={{
             flexDirection: "column",
@@ -165,42 +165,9 @@ const Dashboard3 = ({ percentage = 70 }) => {
               </Text>
             </TouchableOpacity>
           </View>
-          {/* <View style={styles.bottomCard1}>
-            <Text style={styles.bottomcard2Title}>Quick Upload</Text>
-            <View style={{ height: hp(1.7) }} />
-            <View style={styles.cardButton}>
-              <Text
-                style={{
-                  color: "#fff",
-                  fontFamily: "Nunito-SemiBold",
-                  fontSize: hp(1.4),
-                  textAlign: "center",
-                }}
-              >
-                Quick Upload
-              </Text>
-            </View>
-          </View> */}
         </View>
-
-        {/* Education Level */}
-        {/* <View style={styles.middleCard}>
-                    <Text style={styles.bottomcard2Title}>VERIFIED</Text>
-                    <View style={{ height: hp(4) }} />
-                    <View style={styles.cardButton}>
-                        <Text style={{ color: '#fff', fontFamily: 'Nunito-SemiBold', fontSize: hp(1.4), textAlign: 'center' }}>VERIFIED NOW</Text>
-                    </View>
-                </View> */}
-
-        {/* Inventory Level */}
-        {/* <View style={styles.smallCard}>
-                    <Text style={{ fontSize: wp(3), color: '#130160', fontFamily: 'Nunito-SemiBold', textAlign: 'center' }}>NEXT SHIPMENT</Text>
-                    <View style={{ marginTop: '20%' }}>
-                        <Text style={{ color: '#000', fontFamily: 'Nunito-SemiBold', textDecorationLine: 'underline', fontSize: hp(1.4) }}>EST. DATE</Text>
-                        <Text style={{ color: '#000', fontFamily: 'Nunito-SemiBold', fontSize: hp(1.3) }}>31-10-2024</Text>
-                    </View>
-                </View> */}
       </View>
+
       <View style={styles.enrollNowContainer}>
         <Pressable style={styles.libButton}>
           <Text style={styles.liBbuttonText}>Get verified</Text>
@@ -213,7 +180,6 @@ const Dashboard3 = ({ percentage = 70 }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    // backgroundColor: "#f8f9fa",
     paddingVertical: 16,
   },
   header: {
@@ -265,7 +231,6 @@ const styles = StyleSheet.create({
     fontSize: wp(3.3),
     color: "#130160",
     fontFamily: "Nunito-SemiBold",
-    // marginBottom: 8,
   },
   description: {
     fontSize: 14,
@@ -296,11 +261,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   smallCard: {
-    // flex: 1,
     backgroundColor: "#F2F5F8",
     borderRadius: 6,
-    // padding: 10,
-    // marginHorizontal: 5,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -309,14 +271,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: "48%",
     height: hp(20),
-    // justifyContent: 'space-between'
   },
   smallCard2: {
-    // flex: 1,
     backgroundColor: "#F2F5F8",
     borderRadius: 6,
-    // padding: 10,
-    // marginHorizontal: 5,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -331,7 +289,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#F2F5F8",
     borderRadius: 6,
     padding: 10,
-    // marginHorizontal: 5,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -342,7 +299,6 @@ const styles = StyleSheet.create({
     height: hp(9.3),
   },
   middleCard: {
-    // flex: 1,
     backgroundColor: "#F2F5F8",
     borderRadius: 6,
     padding: 16,
@@ -400,7 +356,6 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   progressContainer: {
-    // position: 'absolute',
     alignItems: "center",
     bottom: 3,
   },

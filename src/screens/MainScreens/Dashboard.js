@@ -8,12 +8,12 @@ import {
   Dimensions,
   Pressable,
 } from "react-native";
-import { Circle } from "react-native-progress"; // For circular progress
+import { Circle } from "react-native-progress";
 import {
   heightPercentageToDP as hp,
   widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
-import Svg, { Line, Path } from "react-native-svg"; // For horizontal progress (e.g., Education Level)
+import Svg, { Line, Path } from "react-native-svg";
 import ProgressBar from "../../Components/ProgressBar";
 import useStore from "../../store";
 
@@ -25,15 +25,16 @@ const Dashboard = ({ percentage = 70 }) => {
   const circumference = radius * Math.PI;
   const { user } = useStore();
 
-  // Calculate the path for the semi-circle
   const semiCircle = `
       M ${strokeWidth / 2} ${center}
       A ${radius} ${radius} 0 0 1 ${size - strokeWidth / 2} ${center}
     `;
 
-  // Calculate the progress
   const progressLength = circumference * (percentage / 100);
   const strokeDasharray = `${progressLength} ${circumference}`;
+
+  // ✅ FIXED: user can be null, and Express returns full_name not name
+  const displayName = user?.full_name || user?.name || "User";
 
   return (
     <View style={styles.container}>
@@ -41,21 +42,21 @@ const Dashboard = ({ percentage = 70 }) => {
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.greeting}>
-            Hello, <Text style={styles.name}>{user.name}</Text>
+            Hello, <Text style={styles.name}>{displayName}</Text>
           </Text>
           <Text style={styles.subtext}>
             Here's what you've been up to lately!
           </Text>
         </View>
         <Image
-          source={require("../../../assets/dashboard_profile.png")} // Replace with profile picture
+          source={require("../../../assets/dashboard_profile.png")}
           style={styles.profileImage}
         />
       </View>
 
       {/* Main Cards */}
       <View style={styles.cardsContainer}>
-        {/* Upgrade Storage */}
+        {/* Total Follower Count */}
         <View style={styles.card}>
           <Text
             style={{
@@ -85,12 +86,12 @@ const Dashboard = ({ percentage = 70 }) => {
               }}
             >
               Unlock Visibility, Connect with Customers, Gain Access to
-              Reseller’s Community, Competitive Edge and Boost Sales
+              Reseller's Community, Competitive Edge and Boost Sales
             </Text>
           </View>
         </View>
 
-        {/* Unlock Education */}
+        {/* Monthly Profile View */}
         <View
           style={{
             flex: 1,
@@ -106,7 +107,6 @@ const Dashboard = ({ percentage = 70 }) => {
             elevation: 2,
             paddingVertical: "2.5%",
             alignItems: "center",
-            // justifyContent: 'space-between',
             paddingHorizontal: "2%",
           }}
         >
@@ -127,6 +127,8 @@ const Dashboard = ({ percentage = 70 }) => {
             </Text>
           </View>
         </View>
+
+        {/* 7 Day Visitor Growth */}
         <View style={styles.card}>
           <Text style={styles.uppercardTitle}>7 DAY VISITOR GROWTH</Text>
           <Circle
@@ -151,9 +153,6 @@ const Dashboard = ({ percentage = 70 }) => {
               the past 7 days.
             </Text>
           </View>
-          {/* <View style={styles.cardButton}>
-                        <Text style={{ color: '#fff', fontFamily: 'Nunito-SemiBold', fontSize: hp(1.4), textAlign: 'center' }}>KEEP GOING</Text>
-                    </View> */}
         </View>
       </View>
 
@@ -171,7 +170,6 @@ const Dashboard = ({ percentage = 70 }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    // backgroundColor: "#f8f9fa",
     paddingVertical: 16,
   },
   header: {
@@ -223,7 +221,6 @@ const styles = StyleSheet.create({
     fontSize: wp(3.3),
     color: "#130160",
     fontFamily: "Nunito-SemiBold",
-    // marginBottom: 8,
   },
   description: {
     fontSize: 14,
@@ -254,7 +251,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   smallCard: {
-    // flex: 1,
     backgroundColor: "#F2F5F8",
     borderRadius: 6,
     padding: 10,
@@ -269,7 +265,6 @@ const styles = StyleSheet.create({
     height: hp(15),
   },
   middleCard: {
-    // flex: 1,
     backgroundColor: "#F2F5F8",
     borderRadius: 6,
     padding: 16,
@@ -318,8 +313,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#00B813",
     width: "100%",
     height: hp(3),
-    // margin: "10%",
-    // bottom: "10%",
     borderRadius: 5,
     justifyContent: "center",
   },
@@ -330,7 +323,6 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   progressContainer: {
-    // position: 'absolute',
     alignItems: "center",
     bottom: 3,
   },
