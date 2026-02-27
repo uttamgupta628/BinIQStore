@@ -18,7 +18,7 @@ import {
   heightPercentageToDP as hp,
 } from "react-native-responsive-screen";
 import FontAwesome from "react-native-vector-icons/FontAwesome";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import Carousel, { Pagination } from "react-native-snap-carousel";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
@@ -72,54 +72,57 @@ const HomeScreen = ({ openDrawer }) => {
     loadFavorites();
   }, []);
 
-  // ✅ FIX: Depend on accessToken so fetches only run after Zustand hydration.
-  // This prevents "Access token missing" errors on persisted sessions.
-  useEffect(() => {
-    if (!accessToken) return; // wait until token is hydrated from AsyncStorage
+  // ✅ FIX: useFocusEffect re-fetches every time the screen comes into focus
+  // This ensures new products/feeds appear immediately after AddProduct navigates back
+  // Still guards against missing accessToken for hydration safety
+  useFocusEffect(
+    useCallback(() => {
+      if (!accessToken) return;
 
-    const loadTrending = async () => {
-      setIsLoadingTrending(true);
-      try {
-        const trending = await fetchTrendingProducts();
-        setTrendingProducts(trending || []);
-      } catch (error) {
-        console.error("Trending products error:", error.message);
-        setTrendingProducts([]);
-      } finally {
-        setIsLoadingTrending(false);
-      }
-    };
+      const loadTrending = async () => {
+        setIsLoadingTrending(true);
+        try {
+          const trending = await fetchTrendingProducts();
+          setTrendingProducts(trending || []);
+        } catch (error) {
+          console.error("Trending products error:", error.message);
+          setTrendingProducts([]);
+        } finally {
+          setIsLoadingTrending(false);
+        }
+      };
 
-    const loadActivity = async () => {
-      setIsLoadingActivity(true);
-      try {
-        const activity = await fetchActivityFeed();
-        setActivityFeed(activity || []);
-      } catch (error) {
-        console.error("Activity feed error:", error.message);
-        setActivityFeed([]);
-      } finally {
-        setIsLoadingActivity(false);
-      }
-    };
+      const loadActivity = async () => {
+        setIsLoadingActivity(true);
+        try {
+          const activity = await fetchActivityFeed();
+          setActivityFeed(activity || []);
+        } catch (error) {
+          console.error("Activity feed error:", error.message);
+          setActivityFeed([]);
+        } finally {
+          setIsLoadingActivity(false);
+        }
+      };
 
-    const loadPromotions = async () => {
-      setIsLoadingPromotions(true);
-      try {
-        const promo = await fetchPromotions();
-        setPromotions(promo || []);
-      } catch (error) {
-        console.error("Promotions error:", error.message);
-        setPromotions([]);
-      } finally {
-        setIsLoadingPromotions(false);
-      }
-    };
+      const loadPromotions = async () => {
+        setIsLoadingPromotions(true);
+        try {
+          const promo = await fetchPromotions();
+          setPromotions(promo || []);
+        } catch (error) {
+          console.error("Promotions error:", error.message);
+          setPromotions([]);
+        } finally {
+          setIsLoadingPromotions(false);
+        }
+      };
 
-    loadTrending();
-    loadActivity();
-    loadPromotions();
-  }, [accessToken]); // ✅ FIX: re-run only when token becomes available
+      loadTrending();
+      loadActivity();
+      loadPromotions();
+    }, [accessToken]) // re-run if token changes (e.g. after login)
+  );
 
   const toggleFavorite = async (itemId) => {
     const newFavorites = new Set(favorites);

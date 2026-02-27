@@ -3,8 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 
-// ✅ Single source of truth — Express backend only
-const BASE_URL = "http://192.168.29.162:3001/api";
+const BASE_URL = "https://biniq.onrender.com/api";
 
 const useStore = create(
   persist(
@@ -15,7 +14,7 @@ const useStore = create(
         set({ isFirstOpen: false });
       },
       user: null,
-      accessToken: null, // ✅ FIX: declared in initial state so hydration works correctly
+      accessToken: null,
       product: null,
       store: null,
       notifications: [],
