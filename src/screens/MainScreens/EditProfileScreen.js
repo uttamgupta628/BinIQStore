@@ -1,6 +1,5 @@
-// src/screens/EditProfileScreen.js
 import { useNavigation } from "@react-navigation/native";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -27,21 +26,23 @@ import SimpleLineIcons from "react-native-vector-icons/SimpleLineIcons";
 import EditImage from "../../../assets/EditImage.svg";
 import DropDownPicker from "react-native-dropdown-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { launchCamera, launchImageLibrary } from "react-native-image-picker";
 import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import useStore from "../../store/";
+import { uploadImageToCloudinary } from "../../store/cloudinaryUpload";
 
 const { width, height } = Dimensions.get("window");
 
 export default function EditProfileScreen({ openDrawer }) {
   const navigation = useNavigation();
-  const { fetchStoreDetails, saveStoreDetails, user } = useStore();
+  const { fetchStoreDetails, saveStoreDetails, user, accessToken } = useStore();
 
   const [openStartDay, setOpenStartDay] = useState(false);
   const [openEndDay, setOpenEndDay] = useState(false);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const [valueStartDay, setValueStartDay] = useState("Monday");
   const [valueEndDay, setValueEndDay] = useState("Sunday");
@@ -53,6 +54,7 @@ export default function EditProfileScreen({ openDrawer }) {
   const [zipCode, setZipCode] = useState("");
   const [country, setCountry] = useState("");
   const [storeName, setStoreName] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
   const [googleMapsLink, setGoogleMapsLink] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [storeEmail, setStoreEmail] = useState("");
@@ -61,6 +63,15 @@ export default function EditProfileScreen({ openDrawer }) {
   const [twitterLink, setTwitterLink] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [hasStore, setHasStore] = useState(false);
+
+  // ✅ store_image: holds the Cloudinary URL (string) after upload
+  // storeImageLocal: local URI shown as preview before/after upload
+  const [storeImageUrl, setStoreImageUrl] = useState(null);   // Cloudinary URL saved to DB
+  const [storeImageLocal, setStoreImageLocal] = useState(null); // local URI for preview
+  // ✅ ref keeps storeImageUrl in sync — avoids stale closure in async handleSave
+  const storeImageUrlRef = useRef(null);
+  // ✅ tracks whether user picked a NEW image — prevents useEffect from overwriting it
+  const imageManuallyChangedRef = useRef(false);
 
   const [days, setDays] = useState([
     { label: "Monday", value: "Monday" },
@@ -75,20 +86,13 @@ export default function EditProfileScreen({ openDrawer }) {
   const API_KEY = "AIzaSyCY-8_-SbCN29nphT9QFtbzWV5H3asJQ4Q";
 
   useEffect(() => {
+    if (!accessToken || !user) return;
+
     const loadStoreDetails = async () => {
       setIsLoading(true);
       try {
-        if (!user) {
-          console.log("No user logged in — skipping store load.");
-          return;
-        }
-
         const store = await fetchStoreDetails();
-        console.log("Store: ", store);
-
-        // ✅ FIXED: store can be null if user has no store yet
         if (!store) {
-          console.log("No store found — showing empty form for creation.");
           setHasStore(false);
           return;
         }
@@ -101,34 +105,41 @@ export default function EditProfileScreen({ openDrawer }) {
         setZipCode(store.zip_code || "");
         setCountry(store.country || "");
         setGoogleMapsLink(store.google_maps_link || "");
+        setWebsiteUrl(store.website_url || "");
         setPhoneNumber(store.phone_number || "");
         setStoreEmail(store.store_email || "");
         setFacebookLink(store.facebook_link || "");
-        setInstagramLink(store.instagram_link || store.instagam_link || "");
+        setInstagramLink(store.instagram_link || "");
         setTwitterLink(store.twitter_link || "");
 
-        if (store.business_days) {
-          const [startDay, endDay] = store.business_days.split(" - ");
-          setValueStartDay(startDay || "Monday");
-          setValueEndDay(endDay || "Sunday");
+        // ✅ Load existing store_image from DB
+        // Only update if user hasn't manually picked a new image (prevents race condition)
+        if (!imageManuallyChangedRef.current) {
+          setStoreImageUrl(store.store_image || null);
+          storeImageUrlRef.current = store.store_image || null;
+          setStoreImageLocal(store.store_image || null);
         }
 
-        if (store.business_timing) {
-          const parts = store.business_timing.split(" - ");
+        if (store.working_days) {
+          const parts = store.working_days.split(" - ");
+          setValueStartDay(parts[0] || "Monday");
+          setValueEndDay(parts[1] || "Sunday");
+        }
+
+        if (store.working_time) {
+          const parts = store.working_time.split(" - ");
           if (parts.length === 2) {
             const startMatch = parts[0].match(/(\d+):(\d+)/);
             const endMatch = parts[1].match(/(\d+):(\d+)/);
-
             if (startMatch) {
-              const startTime = new Date();
-              startTime.setHours(parseInt(startMatch[1]), parseInt(startMatch[2]));
-              setValueStartTime(startTime);
+              const t = new Date();
+              t.setHours(parseInt(startMatch[1]), parseInt(startMatch[2]));
+              setValueStartTime(t);
             }
-
             if (endMatch) {
-              const endTime = new Date();
-              endTime.setHours(parseInt(endMatch[1]), parseInt(endMatch[2]));
-              setValueEndTime(endTime);
+              const t = new Date();
+              t.setHours(parseInt(endMatch[1]), parseInt(endMatch[2]));
+              setValueEndTime(t);
             }
           }
         }
@@ -139,23 +150,87 @@ export default function EditProfileScreen({ openDrawer }) {
       }
     };
 
-    if (user) loadStoreDetails();
-  }, [fetchStoreDetails, user]);
+    loadStoreDetails();
+  }, [accessToken]);
+
+  // ✅ Pick image from camera or gallery, upload to Cloudinary immediately
+  const handlePickStoreImage = () => {
+    Alert.alert(
+      "Store Image",
+      "Choose an option",
+      [
+        {
+          text: "Camera",
+          onPress: () =>
+            launchCamera(
+              { mediaType: "photo", maxWidth: 800, maxHeight: 800 },
+              (response) => handleImageResponse(response)
+            ),
+        },
+        {
+          text: "Gallery",
+          onPress: () =>
+            launchImageLibrary(
+              { mediaType: "photo", maxWidth: 800, maxHeight: 800 },
+              (response) => handleImageResponse(response)
+            ),
+        },
+        { text: "Cancel", style: "cancel" },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const handleImageResponse = async (response) => {
+    if (response.didCancel || response.errorCode) return;
+    if (!response.assets || !response.assets[0]) return;
+
+    const asset = response.assets[0];
+    const imageFile = {
+      uri: asset.uri,
+      fileName: asset.fileName || `store_${Date.now()}.jpg`,
+      type: asset.type || "image/jpeg",
+    };
+
+    // Show local preview immediately
+    setStoreImageLocal(asset.uri);
+
+    // Upload to Cloudinary in background
+    setIsUploadingImage(true);
+    try {
+      const cloudinaryUrl = await uploadImageToCloudinary(imageFile, "biniq/stores");
+      setStoreImageUrl(cloudinaryUrl);
+      storeImageUrlRef.current = cloudinaryUrl; // keep ref in sync
+      imageManuallyChangedRef.current = true;  // prevent useEffect from overwriting
+      console.log("Store image uploaded:", cloudinaryUrl);
+
+      // ✅ AUTO-SAVE: immediately persist store_image to backend right after upload
+      // Eliminates any race condition — image is saved independently of the full form
+      if (hasStore) {
+        try {
+          await saveStoreDetails({ store_image: cloudinaryUrl }, true);
+          console.log("store_image auto-saved to DB:", cloudinaryUrl);
+        } catch (autoSaveError) {
+          console.error("Auto-save store_image failed:", autoSaveError.message);
+          // non-blocking — user can still save via Save button
+        }
+      }
+    } catch (error) {
+      console.error("Store image upload failed:", error.message);
+      Alert.alert("Upload Error", "Failed to upload image. Please try again.");
+      setStoreImageLocal(storeImageUrl); // revert preview to last saved URL
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
 
   const fetchSuggestions = async (input) => {
-    if (!input) {
-      setSuggestions([]);
-      return;
-    }
+    if (!input) { setSuggestions([]); return; }
     const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&key=${API_KEY}`;
     try {
       const response = await axios.get(url);
       const data = response.data;
-      if (data.status === "OK") {
-        setSuggestions(data.predictions);
-      } else {
-        setSuggestions([]);
-      }
+      setSuggestions(data.status === "OK" ? data.predictions : []);
     } catch (error) {
       console.error("Error fetching suggestions:", error);
       setSuggestions([]);
@@ -182,11 +257,11 @@ export default function EditProfileScreen({ openDrawer }) {
       if (data.results.length > 0) {
         const components = data.results[0].address_components;
         let city = "", state = "", zipCode = "", country = "";
-        components.forEach((component) => {
-          if (component.types.includes("locality")) city = component.long_name;
-          if (component.types.includes("administrative_area_level_1")) state = component.long_name;
-          if (component.types.includes("postal_code")) zipCode = component.long_name;
-          if (component.types.includes("country")) country = component.long_name;
+        components.forEach((c) => {
+          if (c.types.includes("locality")) city = c.long_name;
+          if (c.types.includes("administrative_area_level_1")) state = c.long_name;
+          if (c.types.includes("postal_code")) zipCode = c.long_name;
+          if (c.types.includes("country")) country = c.long_name;
         });
         return { city, state, zipCode, country };
       }
@@ -198,9 +273,8 @@ export default function EditProfileScreen({ openDrawer }) {
   };
 
   const handleOpenDropdown = (setOpen, isOpen, key) => {
-    if (isOpen) {
-      setOpen(false);
-    } else {
+    if (isOpen) { setOpen(false); }
+    else {
       setOpen(true);
       if (key !== "startDay") setOpenStartDay(false);
       if (key !== "endDay") setOpenEndDay(false);
@@ -208,47 +282,77 @@ export default function EditProfileScreen({ openDrawer }) {
   };
 
   const handleTimeChange = (event, selectedDate, setTime, setShowPicker) => {
-    const currentDate = selectedDate || new Date();
     setShowPicker(Platform.OS === "ios");
-    setTime(currentDate);
+    if (selectedDate) setTime(selectedDate);
   };
 
-  const formatTime = (date) => {
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  };
+  const formatTime = (date) =>
+    date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   const handleSave = async () => {
+    if (!storeName.trim()) {
+      Alert.alert("Error", "Please enter a store name.");
+      return;
+    }
+    if (isUploadingImage) {
+      Alert.alert("Please wait", "Image is still uploading...");
+      return;
+    }
+
     setIsLoading(true);
     try {
+      // ✅ FIX: read storeImageUrl directly from ref to avoid stale closure
+      // Always include store_image in payload — null or Cloudinary URL
+      // Use ref value to avoid stale closure — ref is always current
+      const currentImageUrl = storeImageUrlRef.current;
+      console.log("Saving with store_image:", currentImageUrl);
+
       const storeData = {
-        store_name: storeName,
+        store_name: storeName.trim(),
         address,
         city,
         state,
         zip_code: zipCode,
         country,
         google_maps_link: googleMapsLink,
-        business_days: `${valueStartDay} - ${valueEndDay}`,
-        business_timing: `${formatTime(valueStartTime)} - ${formatTime(valueEndTime)}`,
+        website_url: websiteUrl,
+        working_days: `${valueStartDay} - ${valueEndDay}`,
+        working_time: `${formatTime(valueStartTime)} - ${formatTime(valueEndTime)}`,
         phone_number: phoneNumber,
         store_email: storeEmail,
         facebook_link: facebookLink,
         instagram_link: instagramLink,
         twitter_link: twitterLink,
+        // ✅ FIX: always include store_image so it is never omitted from the PUT body
+        store_image: currentImageUrl || null,
       };
-      const response = await saveStoreDetails(storeData);
-      console.log("Save response:", response.message);
-      Alert.alert("Success", response.message || "Store details saved successfully!");
+
+      const response = await saveStoreDetails(storeData, hasStore);
+      console.log("Save response:", response);
+
+      // ✅ re-fetch store after save so Zustand cache and image state are in sync
+      imageManuallyChangedRef.current = false; // reset flag before re-fetch
+      const updatedStore = await fetchStoreDetails();
+      if (updatedStore?.store_image) {
+        setStoreImageUrl(updatedStore.store_image);
+        storeImageUrlRef.current = updatedStore.store_image;
+        setStoreImageLocal(updatedStore.store_image);
+      }
+
+      Alert.alert(
+        "Success",
+        hasStore ? "Store updated successfully!" : "Store created successfully!",
+      );
       setHasStore(true);
     } catch (error) {
       console.error("Save error:", error.message);
-      Alert.alert("Error", error.message || "Failed to save store details.");
+      Alert.alert("Error", error.response?.data?.message || error.message || "Failed to save store details.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !hasStore && !storeName) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" color="#130160" />
@@ -272,7 +376,6 @@ export default function EditProfileScreen({ openDrawer }) {
           </View>
         </View>
 
-        {/* ✅ Show info banner if no store yet */}
         {!hasStore && (
           <View style={styles.infoBanner}>
             <Text style={styles.infoBannerText}>
@@ -281,17 +384,44 @@ export default function EditProfileScreen({ openDrawer }) {
           </View>
         )}
 
+        {/* ✅ Profile image — tapping opens picker, uploads to Cloudinary */}
         <View style={styles.profileSection}>
-          <Image
-            source={require("../../../assets/profile_img.png")}
-            style={styles.profilePicture}
-          />
-          <TouchableOpacity style={styles.editBtn}>
+          <TouchableOpacity onPress={handlePickStoreImage} activeOpacity={0.8}>
+            {storeImageLocal ? (
+              <Image
+                // ✅ FIX: cache busting — force React Native to reload image
+                // when URL changes (RN aggressively caches remote images by URL)
+                source={{ uri: storeImageLocal, cache: "reload" }}
+                style={styles.profilePicture}
+              />
+            ) : (
+              <Image
+                source={require("../../../assets/profile_img.png")}
+                style={styles.profilePicture}
+              />
+            )}
+            {/* Upload indicator overlay */}
+            {isUploadingImage && (
+              <View style={styles.uploadingOverlay}>
+                <ActivityIndicator color="#fff" size="small" />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Edit button */}
+          <TouchableOpacity style={styles.editBtn} onPress={handlePickStoreImage}>
             <EditImage width={wp(3)} />
           </TouchableOpacity>
+
+          {/* Label below image */}
+          <Text style={styles.changePhotoText}>
+            {isUploadingImage ? "Uploading..." : "Tap to change photo"}
+          </Text>
         </View>
+
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Store Details</Text>
+
           <Text style={styles.label}>Store Name</Text>
           <View style={styles.inputContainer}>
             <TextInput
@@ -302,15 +432,13 @@ export default function EditProfileScreen({ openDrawer }) {
               placeholderTextColor="gray"
             />
           </View>
+
           <Text style={styles.label}>Address</Text>
           <View style={styles.inputContainer}>
             <TextInput
               placeholder="Enter your complete store address"
               value={address}
-              onChangeText={(text) => {
-                setAddress(text);
-                fetchSuggestions(text);
-              }}
+              onChangeText={(text) => { setAddress(text); fetchSuggestions(text); }}
               style={styles.input}
               placeholderTextColor="gray"
             />
@@ -332,6 +460,7 @@ export default function EditProfileScreen({ openDrawer }) {
               />
             </View>
           )}
+
           <View style={styles.inputRow}>
             <View style={styles.inputContainerHalf}>
               <Text style={styles.label}>City</Text>
@@ -346,6 +475,7 @@ export default function EditProfileScreen({ openDrawer }) {
               </View>
             </View>
           </View>
+
           <View style={styles.inputRow}>
             <View style={styles.inputContainerHalf}>
               <Text style={styles.label}>Zip Code</Text>
@@ -360,18 +490,23 @@ export default function EditProfileScreen({ openDrawer }) {
               </View>
             </View>
           </View>
+
           <Text style={styles.label}>Google Maps Link</Text>
           <View style={styles.inputContainer}>
-            <TextInput placeholder="Google Maps Links" value={googleMapsLink} onChangeText={setGoogleMapsLink} style={styles.input} placeholderTextColor="gray" />
+            <TextInput placeholder="Google Maps Link" value={googleMapsLink} onChangeText={setGoogleMapsLink} style={styles.input} placeholderTextColor="gray" />
           </View>
-          <Text style={styles.label}>Website Url</Text>
+
+          <Text style={styles.label}>Website URL</Text>
           <View style={styles.inputContainer}>
-            <TextInput placeholder="Add website url" style={styles.input} placeholderTextColor="gray" />
+            <TextInput placeholder="Add website URL" value={websiteUrl} onChangeText={setWebsiteUrl} style={styles.input} placeholderTextColor="gray" />
           </View>
         </View>
+
         <View style={styles.divider} />
+
         <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Business Address Details</Text>
+          <Text style={styles.sectionTitle}>Business Details</Text>
+
           <Text style={styles.label}>Working Days</Text>
           <View style={styles.dropdownRow}>
             <View style={[styles.dropdownContainer, { zIndex: 600 }]}>
@@ -407,6 +542,7 @@ export default function EditProfileScreen({ openDrawer }) {
               />
             </View>
           </View>
+
           <Text style={styles.label}>Working Time</Text>
           <View style={styles.dropdownRow}>
             <TouchableOpacity style={styles.timePickerButton} onPress={() => setShowStartTimePicker(true)}>
@@ -432,43 +568,50 @@ export default function EditProfileScreen({ openDrawer }) {
               onChange={(event, date) => handleTimeChange(event, date, setValueEndTime, setShowEndTimePicker)}
             />
           )}
+
           <Text style={styles.label}>Phone Number</Text>
           <View style={styles.inputContainer}>
             <TextInput placeholder="+97 23342234244" value={phoneNumber} onChangeText={setPhoneNumber} style={styles.input} placeholderTextColor="gray" />
           </View>
+
           <Text style={styles.label}>Store Email</Text>
           <View style={styles.inputContainer}>
             <TextInput placeholder="Enter your store email" value={storeEmail} onChangeText={setStoreEmail} style={styles.input} placeholderTextColor="gray" />
           </View>
         </View>
+
         <View style={styles.divider} />
+
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Social Media Links</Text>
           <View style={styles.inputContainer}>
             <TextInput placeholder="Facebook link" value={facebookLink} onChangeText={setFacebookLink} style={styles.input} placeholderTextColor="gray" />
           </View>
           <View style={styles.inputContainer}>
-            <TextInput placeholder="Instagram Link" value={instagramLink} onChangeText={setInstagramLink} style={styles.input} placeholderTextColor="gray" />
+            <TextInput placeholder="Instagram link" value={instagramLink} onChangeText={setInstagramLink} style={styles.input} placeholderTextColor="gray" />
           </View>
           <View style={styles.inputContainer}>
-            <TextInput placeholder="Twitter Link" value={twitterLink} onChangeText={setTwitterLink} style={styles.input} placeholderTextColor="gray" />
+            <TextInput placeholder="Twitter link" value={twitterLink} onChangeText={setTwitterLink} style={styles.input} placeholderTextColor="gray" />
           </View>
         </View>
+
         <View style={styles.divider} />
+
         <TouchableOpacity
-          style={[styles.gettingStarted, isLoading && styles.disabledButton]}
+          style={[styles.gettingStarted, (isLoading || isUploadingImage) && styles.disabledButton]}
           onPress={handleSave}
-          disabled={isLoading}
+          disabled={isLoading || isUploadingImage}
         >
           {isLoading ? (
             <ActivityIndicator color="#fff" />
           ) : (
             <Text style={styles.saveButtonText}>
-              {hasStore ? "Save" : "Create Store"}
+              {hasStore ? "Save Changes" : "Create Store"}
             </Text>
           )}
         </TouchableOpacity>
       </ImageBackground>
+
       <View style={styles.bottomSpacer} />
       <ImageBackground
         source={require("../../../assets/vector_2.png")}
@@ -487,9 +630,34 @@ const styles = StyleSheet.create({
   headerText: { fontFamily: "Nunito-Bold", fontSize: hp(3.2), textAlign: "left", color: "#0D0140", marginLeft: "3%" },
   infoBanner: { backgroundColor: "#FFF3CD", borderRadius: 8, marginHorizontal: "5%", marginTop: "3%", padding: 12 },
   infoBannerText: { fontFamily: "Nunito-Regular", fontSize: hp(1.8), color: "#856404" },
-  profileSection: { alignItems: "center", borderBottomColor: "#f0f0f0", justifyContent: "center", marginTop: "3%" },
-  profilePicture: { width: wp(26), height: wp(26), borderRadius: 40 },
-  editBtn: { width: wp(7.5), height: wp(7.5), backgroundColor: "#130160", position: "absolute", bottom: 0, right: "36.5%", borderRadius: 20, borderWidth: 3, borderColor: "#fbfdff", alignItems: "center", justifyContent: "center" },
+  profileSection: { alignItems: "center", justifyContent: "center", marginTop: "3%", marginBottom: hp(1) },
+  profilePicture: { width: wp(26), height: wp(26), borderRadius: wp(13) },
+  uploadingOverlay: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: wp(13),
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  editBtn: {
+    width: wp(7.5), height: wp(7.5),
+    backgroundColor: "#130160",
+    position: "absolute",
+    bottom: hp(2.5),
+    right: wp(35),
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: "#fbfdff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  changePhotoText: {
+    fontFamily: "Nunito-Regular",
+    fontSize: hp(1.6),
+    color: "#524B6B",
+    marginTop: hp(0.8),
+  },
   sectionContainer: { padding: "5%" },
   sectionTitle: { fontFamily: "Nunito-SemiBold", fontSize: wp(5), color: "#000000", marginBottom: "5%" },
   label: { color: "black", fontFamily: "Nunito-SemiBold", fontSize: hp(1.8), marginTop: "1.5%" },

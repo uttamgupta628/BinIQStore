@@ -24,10 +24,11 @@ import DropDownPicker from "react-native-dropdown-picker";
 import Upload_Photo_Icon from "../../../assets/Upload_Photo_Icon.svg";
 import { launchCamera, launchImageLibrary } from "react-native-image-picker";
 import useStore from "../../store";
+import { uploadMultipleImages } from "../../store/cloudinaryUpload";
 
 const AddProduct = () => {
   const navigation = useNavigation();
-  const { fetchCategories, addProduct } = useStore();
+  const { fetchCategories, addProduct, accessToken } = useStore();
 
   const [openAddType, setOpenAddType] = useState(false);
   const [openCategory, setOpenCategory] = useState(false);
@@ -35,15 +36,18 @@ const AddProduct = () => {
   const [valueCategory, setValueCategory] = useState(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [upcId, setUpcId] = useState("");        
   const [price, setPrice] = useState("");
   const [offerPrice, setOfferPrice] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [bannerImage, setBannerImage] = useState(null);
+  const [imageInner, setImageInner] = useState(null); 
+  const [imageOuter, setImageOuter] = useState(null); 
   const [categories, setCategories] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCategoriesLoading, setIsCategoriesLoading] = useState(false);
 
   useEffect(() => {
+    if (!accessToken) return;
     const loadCategories = async () => {
       setIsCategoriesLoading(true);
       try {
@@ -57,12 +61,11 @@ const AddProduct = () => {
       }
     };
     loadCategories();
-  }, []);
+  }, [accessToken]);
 
   const addTypeOptions = [
-    { label: "Activity Feed", value: "activity" },
-    { label: "Promotion", value: "promotion" },
-    { label: "Trending", value: "trending" },
+    { label: "Trending", value: 1 },
+    { label: "Activity Feed", value: 2 },
   ];
 
   const handleOpenDropdown = (setOpen, isOpen, key) => {
@@ -75,7 +78,7 @@ const AddProduct = () => {
     }
   };
 
-  const handleImagePick = () => {
+  const pickImage = (onSelect) => {
     Alert.alert(
       "Select Image",
       "Choose an option to upload an image",
@@ -89,8 +92,13 @@ const AddProduct = () => {
                 if (response.didCancel) return;
                 if (response.errorCode) {
                   Alert.alert("Error", response.errorMessage);
-                } else if (response.assets) {
-                  setBannerImage(response.assets[0].uri);
+                } else if (response.assets && response.assets[0]) {
+                  const asset = response.assets[0];
+                  onSelect({
+                    uri: asset.uri,
+                    fileName: asset.fileName || `photo_${Date.now()}.jpg`,
+                    type: asset.type || "image/jpeg",
+                  });
                 }
               }
             ),
@@ -104,8 +112,13 @@ const AddProduct = () => {
                 if (response.didCancel) return;
                 if (response.errorCode) {
                   Alert.alert("Error", response.errorMessage);
-                } else if (response.assets) {
-                  setBannerImage(response.assets[0].uri);
+                } else if (response.assets && response.assets[0]) {
+                  const asset = response.assets[0];
+                  onSelect({
+                    uri: asset.uri,
+                    fileName: asset.fileName || `photo_${Date.now()}.jpg`,
+                    type: asset.type || "image/jpeg",
+                  });
                 }
               }
             ),
@@ -117,56 +130,131 @@ const AddProduct = () => {
   };
 
   const handleAddProduct = async () => {
-    if (!valueCategory || !title || !description || !price || !quantity || !bannerImage) {
-      Alert.alert("Error", "Please fill all fields and select an image.");
+    if (!title.trim()) {
+      Alert.alert("Error", "Please enter a product title.");
+      return;
+    }
+    if (!description.trim()) {
+      Alert.alert("Error", "Please enter a product description.");
+      return;
+    }
+    if (!upcId.trim()) {
+      Alert.alert("Error", "Please enter the UPC ID.");
+      return;
+    }
+    if (!valueCategory) {
+      Alert.alert("Error", "Please select a category.");
+      return;
+    }
+    if (valueAddType === null || valueAddType === undefined) {
+      Alert.alert("Error", "Please select a product type.");
+      return;
+    }
+    if (!price || isNaN(Number(price)) || Number(price) <= 0) {
+      Alert.alert("Error", "Please enter a valid price.");
+      return;
+    }
+    if (offerPrice && (isNaN(Number(offerPrice)) || Number(offerPrice) <= 0)) {
+      Alert.alert("Error", "Please enter a valid offer price.");
+      return;
+    }
+    if (!quantity || isNaN(Number(quantity)) || Number(quantity) < 0) {
+      Alert.alert("Error", "Please enter a valid quantity.");
+      return;
+    }
+    if (!imageInner) {
+      Alert.alert("Error", "Please select an inner product image.");
+      return;
+    }
+    if (!imageOuter) {
+      Alert.alert("Error", "Please select an outer product image.");
       return;
     }
 
     setIsLoading(true);
     try {
-      const productData = {
+      // Step 1: Upload both images to Cloudinary and get permanent public URLs
+      let imageInnerUrl, imageOuterUrl;
+      try {
+        console.log("Uploading images to Cloudinary...");
+        [imageInnerUrl, imageOuterUrl] = await uploadMultipleImages(
+          [imageInner, imageOuter],
+          "biniq/products"
+        );
+        console.log("Images uploaded:", imageInnerUrl, imageOuterUrl);
+      } catch (uploadError) {
+        console.error("Image upload failed:", uploadError.message);
+        Alert.alert("Upload Error", "Failed to upload images. Please try again.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Step 2: Send plain JSON with real Cloudinary URLs to backend
+      const payload = {
         category_id: valueCategory,
-        title,
-        description,
-        price,
-        offer_price: offerPrice,
-        quantity,
-        type: valueAddType,
-        pic: bannerImage,
+        title: title.trim(),
+        description: description.trim(),
+        upc_id: upcId.trim(),
+        price: Number(price),
+        type: Number(valueAddType),
+        image_inner: imageInnerUrl,   
+        image_outer: imageOuterUrl,   
+        ...(offerPrice && { offer_price: Number(offerPrice) }),
       };
 
-      const response = await addProduct(productData);
+      const response = await addProduct(payload);
       console.log("Add product response:", response);
 
       Alert.alert("Success", "Product added successfully!", [
         {
           text: "OK",
           onPress: () => {
-            // Reset form
             setTitle("");
             setDescription("");
+            setUpcId("");
             setPrice("");
             setOfferPrice("");
             setQuantity("");
             setValueCategory(null);
             setValueAddType(null);
-            setBannerImage(null);
+            setImageInner(null);
+            setImageOuter(null);
             navigation.goBack();
           },
         },
       ]);
     } catch (error) {
       console.error("Add product error:", error.message);
+      // ✅ Show all backend validation errors clearly
       const message =
-        error.response?.data?.message ||
-        Object.values(error.response?.data || {})?.[0]?.[0] ||
-        error.message ||
-        "Failed to add product";
+        Array.isArray(error.response?.data?.errors)
+          ? error.response.data.errors.map((e) => e.msg).join("\n")
+          : error.response?.data?.message ||
+            error.message ||
+            "Failed to add product";
       Alert.alert("Error", message);
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Reusable image upload box component
+  const ImagePickerBox = ({ label, image, onPress }) => (
+    <>
+      <Text style={styles.label}>{label}</Text>
+      <TouchableOpacity style={styles.bannerContainer} onPress={onPress}>
+        {image ? (
+          <Image
+            source={{ uri: image.uri }}
+            style={styles.bannerImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <Upload_Photo_Icon width="50%" height="50%" />
+        )}
+      </TouchableOpacity>
+    </>
+  );
 
   return (
     <ScrollView
@@ -192,6 +280,7 @@ const AddProduct = () => {
         <View style={styles.spacer} />
 
         <View style={styles.sectionContainer}>
+
           <Text style={styles.label}>Title</Text>
           <View style={styles.inputContainer}>
             <TextInput
@@ -214,7 +303,21 @@ const AddProduct = () => {
             />
           </View>
 
-          <Text style={styles.label}>What do you want to add?</Text>
+          {/* ✅ New required field from schema */}
+          <Text style={styles.label}>UPC ID</Text>
+          <View style={styles.inputContainer}>
+            <TextInput
+              placeholder="Enter UPC barcode ID"
+              value={upcId}
+              onChangeText={setUpcId}
+              style={styles.inputText}
+              placeholderTextColor={"#999"}
+              autoCapitalize="none"
+            />
+          </View>
+
+          {/* ✅ type: 1=Trending, 2=Activity Feed */}
+          <Text style={styles.label}>Product Type</Text>
           <View style={[styles.dropdownContainer, { zIndex: 600 }]}>
             <DropDownPicker
               open={openAddType}
@@ -231,7 +334,7 @@ const AddProduct = () => {
                 <SimpleLineIcons name="arrow-down" size={20} color="#000" />
               )}
               onSelectItem={() => setOpenAddType(false)}
-              dropDownMaxHeight={hp(20)}
+              dropDownMaxHeight={hp(15)}
             />
           </View>
 
@@ -248,10 +351,14 @@ const AddProduct = () => {
                 open={openCategory}
                 value={valueCategory}
                 items={categories}
-                setOpen={() => handleOpenDropdown(setOpenCategory, openCategory, "category")}
+                setOpen={() =>
+                  handleOpenDropdown(setOpenCategory, openCategory, "category")
+                }
                 setValue={setValueCategory}
                 setItems={setCategories}
-                placeholder="Select category"
+                placeholder={
+                  categories.length === 0 ? "No categories available" : "Select category"
+                }
                 style={styles.dropdown}
                 textStyle={styles.dropdownText}
                 dropDownContainerStyle={styles.dropdownContainerStyle}
@@ -261,6 +368,7 @@ const AddProduct = () => {
                 onSelectItem={() => setOpenCategory(false)}
                 dropDownMaxHeight={hp(40)}
                 scrollViewProps={{ showsVerticalScrollIndicator: true }}
+                disabled={categories.length === 0}
               />
             )}
           </View>
@@ -301,18 +409,19 @@ const AddProduct = () => {
             />
           </View>
 
-          <Text style={styles.label}>Banner</Text>
-          <TouchableOpacity style={styles.bannerContainer} onPress={handleImagePick}>
-            {bannerImage ? (
-              <Image
-                source={{ uri: bannerImage }}
-                style={styles.bannerImage}
-                resizeMode="cover"
-              />
-            ) : (
-              <Upload_Photo_Icon width="50%" height="50%" />
-            )}
-          </TouchableOpacity>
+          {/* ✅ Two image fields matching schema: image_inner and image_outer */}
+          <ImagePickerBox
+            label="Inner Product Image"
+            image={imageInner}
+            onPress={() => pickImage(setImageInner)}
+          />
+
+          <ImagePickerBox
+            label="Outer Product Image"
+            image={imageOuter}
+            onPress={() => pickImage(setImageOuter)}
+          />
+
         </View>
 
         <TouchableOpacity
@@ -321,7 +430,10 @@ const AddProduct = () => {
           disabled={isLoading}
         >
           {isLoading ? (
-            <ActivityIndicator color="#fff" />
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color="#fff" />
+              <Text style={styles.loadingText}>Uploading...</Text>
+            </View>
           ) : (
             <Text style={styles.loginButtonText}>Add Product</Text>
           )}
@@ -451,5 +563,15 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito-SemiBold",
     color: "#fff",
     fontSize: hp(2.5),
+  },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  loadingText: {
+    fontFamily: "Nunito-SemiBold",
+    color: "#fff",
+    fontSize: hp(2),
   },
 });

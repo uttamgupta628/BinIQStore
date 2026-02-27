@@ -34,6 +34,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { width, height } = Dimensions.get("window");
 
+// ✅ FIX: Fallback placeholder for missing images
+const PLACEHOLDER = require("../../../assets/slider_1.png");
+
 const HomeScreen = ({ openDrawer }) => {
   const navigation = useNavigation();
   const [activeSlide, setActiveSlide] = useState(0);
@@ -44,11 +47,11 @@ const HomeScreen = ({ openDrawer }) => {
   const [isLoadingActivity, setIsLoadingActivity] = useState(true);
   const [isLoadingPromotions, setIsLoadingPromotions] = useState(true);
   const [favorites, setFavorites] = useState(new Set());
-  const [error, setError] = useState(null);
 
   const {
     user,
     logout,
+    accessToken, // ✅ FIX: pull accessToken so we can depend on it
     fetchTrendingProducts,
     fetchActivityFeed,
     fetchPromotions,
@@ -69,8 +72,11 @@ const HomeScreen = ({ openDrawer }) => {
     loadFavorites();
   }, []);
 
-  // Fetch each section independently so one failure doesn't block others
+  // ✅ FIX: Depend on accessToken so fetches only run after Zustand hydration.
+  // This prevents "Access token missing" errors on persisted sessions.
   useEffect(() => {
+    if (!accessToken) return; // wait until token is hydrated from AsyncStorage
+
     const loadTrending = async () => {
       setIsLoadingTrending(true);
       try {
@@ -113,7 +119,7 @@ const HomeScreen = ({ openDrawer }) => {
     loadTrending();
     loadActivity();
     loadPromotions();
-  }, []);
+  }, [accessToken]); // ✅ FIX: re-run only when token becomes available
 
   const toggleFavorite = async (itemId) => {
     const newFavorites = new Set(favorites);
@@ -162,7 +168,11 @@ const HomeScreen = ({ openDrawer }) => {
       }
     >
       <View style={styles.favouriteCard}>
-        <Image source={item.image} style={styles.favouriteImage} />
+        {/* ✅ FIX: fallback to placeholder if image is null */}
+        <Image
+          source={item.image || PLACEHOLDER}
+          style={styles.favouriteImage}
+        />
         <View style={styles.favouriteDescriptionContainer}>
           <Text style={styles.favouriteDescription}>{item.description}</Text>
         </View>
@@ -191,7 +201,11 @@ const HomeScreen = ({ openDrawer }) => {
       }
     >
       <View style={styles.productCard}>
-        <Image source={item.image} style={styles.productImage} />
+        {/* ✅ FIX: fallback to placeholder if image is null */}
+        <Image
+          source={item.image || PLACEHOLDER}
+          style={styles.productImage}
+        />
         <TouchableOpacity
           onPress={() => toggleFavorite(item.id)}
           style={styles.heartIconContainer}
@@ -224,7 +238,11 @@ const HomeScreen = ({ openDrawer }) => {
       }
     >
       <View style={styles.promotionCard}>
-        <Image source={item.image} style={styles.promotionImage} />
+        {/* ✅ FIX: fallback to placeholder if image is null */}
+        <Image
+          source={item.image || PLACEHOLDER}
+          style={styles.promotionImage}
+        />
         <View style={styles.promotionContent}>
           <View>
             <Text style={styles.promotionTitle}>{item.title}</Text>
@@ -331,7 +349,10 @@ const HomeScreen = ({ openDrawer }) => {
             <FlatList
               data={trendingProducts.slice(0, 7)}
               renderItem={renderTrendingItem}
-              keyExtractor={(item) => item.id.toString()}
+              // ✅ FIX: safe keyExtractor with string fallback
+              keyExtractor={(item, index) =>
+                item.id ? item.id.toString() : `trending-${index}`
+              }
               horizontal={true}
               showsHorizontalScrollIndicator={false}
               ListEmptyComponent={<EmptyComponent message="No trending products" />}
@@ -343,7 +364,9 @@ const HomeScreen = ({ openDrawer }) => {
             <FlatList
               data={trendingProducts.slice(7, 14)}
               renderItem={renderTrendingItem}
-              keyExtractor={(item) => item.id.toString()}
+              keyExtractor={(item, index) =>
+                item.id ? item.id.toString() : `trending2-${index}`
+              }
               horizontal={true}
               showsHorizontalScrollIndicator={false}
             />
@@ -373,7 +396,10 @@ const HomeScreen = ({ openDrawer }) => {
             <FlatList
               data={activityFeed.slice(0, 7)}
               renderItem={renderActivityItem}
-              keyExtractor={(item) => item.id.toString()}
+              // ✅ FIX: safe keyExtractor with string fallback
+              keyExtractor={(item, index) =>
+                item.id ? item.id.toString() : `activity-${index}`
+              }
               horizontal={true}
               showsHorizontalScrollIndicator={false}
               ListEmptyComponent={<EmptyComponent message="No activity feed" />}
@@ -385,7 +411,9 @@ const HomeScreen = ({ openDrawer }) => {
             <FlatList
               data={activityFeed.slice(7, 14)}
               renderItem={renderActivityItem}
-              keyExtractor={(item) => item.id.toString()}
+              keyExtractor={(item, index) =>
+                item.id ? item.id.toString() : `activity2-${index}`
+              }
               horizontal={true}
               showsHorizontalScrollIndicator={false}
             />
@@ -404,7 +432,10 @@ const HomeScreen = ({ openDrawer }) => {
           <FlatList
             data={promotions.slice(0, 7)}
             renderItem={renderPromotionItem}
-            keyExtractor={(item) => item.id.toString()}
+            // ✅ FIX: safe keyExtractor with string fallback
+            keyExtractor={(item, index) =>
+              item.id ? item.id.toString() : `promo-${index}`
+            }
             horizontal={true}
             showsHorizontalScrollIndicator={false}
             ListEmptyComponent={<EmptyComponent message="No promotions" />}

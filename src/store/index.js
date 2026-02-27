@@ -15,6 +15,7 @@ const useStore = create(
         set({ isFirstOpen: false });
       },
       user: null,
+      accessToken: null, // ✅ FIX: declared in initial state so hydration works correctly
       product: null,
       store: null,
       notifications: [],
@@ -209,10 +210,11 @@ const useStore = create(
           const data = response.data;
           console.log("Categories response:", data);
 
-          const cats = data.results || data.categories || data || [];
+          // ✅ FIX: backend returns array directly, field is category_name not name
+          const cats = Array.isArray(data) ? data : data.results || data.categories || [];
           return cats.map((cat) => ({
-            label: cat.name || cat.category_name,
-            value: cat.id || cat._id,
+            label: cat.category_name,
+            value: cat._id,
           }));
         } catch (error) {
           console.error("Fetch categories error:", error.message);
@@ -225,20 +227,14 @@ const useStore = create(
       },
 
       // ✅ POST /api/products
-      addProduct: async (productData) => {
+      // Backend uses express.json() — NO multer — so send plain JSON.
+      // image_inner and image_outer are stored as strings (local URI or S3 URL).
+      addProduct: async (payload) => {
         try {
           const { accessToken } = useStore.getState();
           if (!accessToken) throw new Error("Access token missing.");
 
-          const payload = {
-            name: productData.title,
-            description: productData.description,
-            category: productData.category_id,
-            price: productData.price,
-            quantity: productData.quantity,
-            images: productData.pic ? [productData.pic] : [],
-          };
-          console.log("Adding product, payload:", payload);
+          console.log("Adding product...", payload);
 
           const response = await axios.post(
             `${BASE_URL}/products`,
@@ -280,11 +276,11 @@ const useStore = create(
           const data = response.data;
           console.log("Trending products response:", data);
 
-          const products = data.results || data.products || data || [];
+          const products = data.results || data.products || (Array.isArray(data) ? data : []);
           return products.map((item) => ({
             id: item._id || item.id,
-            image: item.images?.[0] ? { uri: item.images[0] } : null,
-            title: item.name || item.title,
+            image: item.image_inner ? { uri: item.image_inner } : null,  // schema: image_inner
+            title: item.title,
             description: item.description,
             discountPrice: `$${item.offer_price || item.price}`,
             originalPrice: `$${item.price}`,
@@ -319,11 +315,11 @@ const useStore = create(
           const data = response.data;
           console.log("Activity feed response:", data);
 
-          const products = data.results || data.products || data || [];
+          const products = data.results || data.products || (Array.isArray(data) ? data : []);
           return products.map((item) => ({
             id: item._id || item.id,
-            image: item.images?.[0] ? { uri: item.images[0] } : null,
-            title: item.name || item.title,
+            image: item.image_inner ? { uri: item.image_inner } : null,  // schema: image_inner
+            title: item.title,
             description: item.description,
             price: item.offer_price
               ? `$${item.price} - $${item.offer_price}`
@@ -393,16 +389,18 @@ const useStore = create(
             headers: {
               Authorization: `Bearer ${accessToken}`,
               "Content-Type": "application/json",
+              // ✅ FIX: prevent server/proxy from returning a cached response
+              "Cache-Control": "no-cache",
             },
           });
 
           const data = response.data;
           console.log("Fetch store details response:", data);
+          // ✅ always overwrite Zustand store so stale image URLs don't persist
           set({ store: data });
           await AsyncStorage.setItem("store-details", JSON.stringify(data));
           return data;
         } catch (error) {
-          // 404 = user has not created a store yet — not a real crash
           if (error.response?.status === 404) {
             console.log("No store found for this user yet — skipping.");
             set({ store: null });
@@ -417,16 +415,74 @@ const useStore = create(
         }
       },
 
-      // ✅ PUT /api/stores
-      saveStoreDetails: async (storeData) => {
+      // POST /api/stores (create) or PUT /api/stores (update)
+      // hasStore=true  → PUT  (update existing store, requires user_id in body)
+      // hasStore=false → POST (create new store)
+      saveStoreDetails: async (storeData, hasStore = false) => {
         try {
           const { accessToken, user } = useStore.getState();
           if (!accessToken) throw new Error("Access token missing");
 
-          console.log("Saving store details...");
-          const response = await axios.put(
-            `${BASE_URL}/stores`,
-            { ...storeData, user_id: user._id || user.id },
+          const userId = user?._id || user?.id;
+
+          let response;
+          if (hasStore) {
+            // ✅ PUT /api/stores — update existing store
+            console.log("Updating store details, store_image:", storeData.store_image);
+            response = await axios.put(
+              `${BASE_URL}/stores`,
+              { ...storeData, user_id: userId },
+              {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "Content-Type": "application/json",
+                },
+              },
+            );
+          } else {
+            // ✅ POST /api/stores — create new store
+            console.log("Creating new store...");
+            response = await axios.post(
+              `${BASE_URL}/stores`,
+              storeData,
+              {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "Content-Type": "application/json",
+                },
+              },
+            );
+          }
+
+          const data = response.data;
+          console.log("Save store details response:", data);
+
+          // Cache the updated store in Zustand + AsyncStorage
+          const savedStore = data.store || storeData;
+          set({ store: savedStore });
+          await AsyncStorage.setItem("store-details", JSON.stringify(savedStore));
+
+          return data;
+        } catch (error) {
+          console.error("Save store details error:", error.message);
+          if (error.response) {
+            console.error("Response data:", error.response.data);
+            console.error("Response status:", error.response.status);
+          }
+          throw error;
+        }
+      },
+
+      // ✅ POST /api/promotions
+      addPromotion: async (payload) => {
+        try {
+          const { accessToken } = useStore.getState();
+          if (!accessToken) throw new Error("Access token missing.");
+
+          console.log("Adding promotion...", payload);
+          const response = await axios.post(
+            `${BASE_URL}/promotions`,
+            payload,
             {
               headers: {
                 Authorization: `Bearer ${accessToken}`,
@@ -434,22 +490,13 @@ const useStore = create(
               },
             },
           );
-
           const data = response.data;
-          console.log("Save store details response:", data);
-
-          if (data.store) {
-            set({ store: data.store });
-            await AsyncStorage.setItem(
-              "store-details",
-              JSON.stringify(data.store),
-            );
-          }
+          console.log("Add promotion response:", data);
           return data;
         } catch (error) {
-          console.error("Save store details error:", error.message);
+          console.error("Add promotion error:", error.message);
           if (error.response) {
-            console.error("Response data:", error.response.data);
+            console.error("Response data:", JSON.stringify(error.response.data));
             console.error("Response status:", error.response.status);
           }
           throw error;
