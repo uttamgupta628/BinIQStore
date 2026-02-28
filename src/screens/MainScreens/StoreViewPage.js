@@ -1,6 +1,5 @@
 import {
   Dimensions,
-  FlatList,
   Image,
   ImageBackground,
   Pressable,
@@ -11,87 +10,69 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from "react-native-responsive-screen";
-import React, { useRef, useState, useEffect } from "react";
-import { useNavigation } from "@react-navigation/native";
+import React, { useState, useEffect, useCallback } from "react";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
-import Ionicons from "react-native-vector-icons/Ionicons";
 import FontAwesome from "react-native-vector-icons/FontAwesome";
-import Carousel, { Pagination } from "react-native-snap-carousel";
 import LocationIcon from "../../../assets/LocationIcon.svg";
-import HeartIcon from "../../../assets/HeartIcon.svg";
 import FacebookIcon from "../../../assets/FacebookIcon.svg";
 import TwitterIcon from "../../../assets/TwitterIcon.svg";
 import WhatsappIcon from "../../../assets/WhatsappIcon.svg";
 import LinkedinIcon from "../../../assets/LinkedinIcon.svg";
-import SharedIcon from "../../../assets/SharedIcon.svg";
-import RatingsSummary from "../../Components/RatingsSummary";
-import Heart_Icon from "../../../assets/heart_icon.svg";
-import Share_Icon from "../../../assets/share_icon.svg";
 import HiddenFindsImg from "../../../assets/hidden_find_img.svg";
 import BoldTick from "../../../assets/bold_tick.svg";
 import GreenTick from "../../../assets/green_tick.svg";
-import { Star, Heart } from "lucide-react-native";
+import GiftIcon from "../../../assets/promo_Date.svg";
 import useStore from "../../store";
 
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
+const PLACEHOLDER = require("../../../assets/slider_1.png");
+
 const StoreViewPage = () => {
   const navigation = useNavigation();
-  const [favouritePress, setFavouritePressed] = useState(false);
-  const [activeSlide, setActiveSlide] = useState(1);
-  const carouselImages = [
-    {
-      id: 1,
-      image: require("../../../assets/bin_store_img.png"),
-    },
-    {
-      id: 2,
-      image: require("../../../assets/bin_store_img.png"),
-    },
-    {
-      id: 3,
-      image: require("../../../assets/bin_store_img.png"),
-    },
-  ];
   const {
     fetchStoreDetails,
-    store,
     fetchTrendingProducts,
     fetchPromotions,
-    trendingProducts,
-    promotions,
   } = useStore();
+
+  const [store, setStore] = useState(null);
+  const [trendingProducts, setTrendingProducts] = useState([]);
+  const [promotions, setPromotions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        await Promise.all([
-          fetchStoreDetails(),
-          fetchTrendingProducts(),
-          fetchPromotions(),
-        ]);
-      } catch (error) {
-        console.error("Fetch error:", error.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchData();
-  }, [fetchStoreDetails, fetchTrendingProducts, fetchPromotions]);
+  // ✅ useFocusEffect: refreshes when user navigates back from EditProfile
+  useFocusEffect(
+    useCallback(() => {
+      const fetchData = async () => {
+        setIsLoading(true);
+        try {
+          const [storeData, trending, promo] = await Promise.all([
+            fetchStoreDetails(),
+            fetchTrendingProducts(),
+            fetchPromotions(),
+          ]);
+          if (storeData) setStore(storeData);
+          setTrendingProducts(trending || []);
+          setPromotions(promo || []);
+        } catch (error) {
+          console.error("StoreViewPage fetch error:", error.message);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchData();
+    }, []) // ✅ empty — fetch functions are stable references from Zustand
+  );
 
-  const renderItem = ({ item, index }) => {
-    return (
-      <View style={styles.slide}>
-        <Image source={item.image} style={styles.image} />
-      </View>
-    );
-  };
+  // ─── Render helpers ───────────────────────────────────────────────
+
   const renderTrendingItem = ({ item }) => (
     <Pressable
       style={styles.favouritePressable}
@@ -104,27 +85,28 @@ const StoreViewPage = () => {
       }
     >
       <View style={styles.favouriteCard}>
-        <Image source={item.image} style={styles.favouriteImage} />
+        <Image
+          source={item.image || PLACEHOLDER}
+          style={styles.favouriteImage}
+        />
         <View style={styles.favouriteDescriptionContainer}>
-          <Text style={styles.favouriteDescription}>{item.description}</Text>
+          <Text style={styles.favouriteDescription} numberOfLines={2}>
+            {item.description || item.title}
+          </Text>
         </View>
         <View style={styles.favouritePriceContainer}>
-          <View>
-            <Text style={styles.favouriteDiscountPrice}>
-              {item.discountPrice}
-            </Text>
+          <Text style={styles.favouriteDiscountPrice}>{item.discountPrice || `$${item.price}`}</Text>
+          {item.originalPrice ? (
             <Text style={styles.favouritePriceText}>
-              <Text style={styles.favouriteOriginalPrice}>
-                {item.originalPrice}
-              </Text>
-              {"  "}
-              {item.totalDiscount}
+              <Text style={styles.favouriteOriginalPrice}>{item.originalPrice}</Text>
+              {"  "}{item.totalDiscount}
             </Text>
-          </View>
+          ) : null}
         </View>
       </View>
     </Pressable>
   );
+
   const renderPromotionItem = ({ item }) => (
     <Pressable
       style={styles.promotionPressable}
@@ -136,378 +118,250 @@ const StoreViewPage = () => {
       }
     >
       <View style={styles.promotionCard}>
-        <Image source={item.image} style={styles.promotionImage} />
+        <Image
+          source={item.image || PLACEHOLDER}
+          style={styles.promotionImage}
+        />
         <View style={styles.promotionContent}>
-          <View>
-            <Text style={styles.promotionTitle}>{item.title}</Text>
-            <Text style={styles.promotionDescription}>
-              {item.shortDescription}
-            </Text>
-            <Text style={styles.promotionStatus}>Active</Text>
-            <Text style={styles.promotionDate}>
-              <HeartIcon /> Jun20 to July20
+          <Text style={styles.promotionTitle} numberOfLines={1}>{item.title}</Text>
+          <Text style={styles.promotionDescription} numberOfLines={1}>{item.shortDescription || item.description}</Text>
+          <Text style={styles.promotionStatus}>Active</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
+            <GiftIcon width={12} height={12} />
+            <Text style={[styles.promotionDate, { marginLeft: 4 }]}>
+              {item.dateRange || "Limited time"}
             </Text>
           </View>
         </View>
       </View>
     </Pressable>
   );
-  const pagination = () => {
-    return (
-      <Pagination
-        dotsLength={carouselImages.length}
-        activeDotIndex={activeSlide}
-        containerStyle={styles.paginationContainer}
-        dotStyle={styles.paginationDot}
-        inactiveDotStyle={styles.paginationInactiveDot}
-        inactiveDotOpacity={0.3}
-        inactiveDotScale={0.7}
+
+  // ─── Stars helper ────────────────────────────────────────────────
+  const renderStars = (rating = 0) => {
+    const full = Math.floor(rating);
+    return [1, 2, 3, 4, 5].map((i) => (
+      <FontAwesome
+        key={i}
+        name="star"
+        size={15}
+        color={i <= full ? "#FFD700" : "#e6e6e6"}
       />
-    );
+    ));
   };
 
+  const formatCount = (n) => {
+    if (!n) return "0";
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+    return `${n}`;
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#130160" />
+        <Text style={{ marginTop: 12, color: "#524B6B", fontFamily: "Nunito-Regular", fontSize: 16 }}>
+          Loading store...
+        </Text>
+      </View>
+    );
+  }
+
+  // ✅ Guard: if store couldn't be loaded, show a friendly message
+  if (!store) {
+    return (
+      <View style={styles.loadingContainer}>
+        <MaterialIcons name="store" size={64} color="#ccc" />
+        <Text style={{ marginTop: 12, color: "#524B6B", fontFamily: "Nunito-SemiBold", fontSize: 16, textAlign: "center" }}>
+          {"Store not found.\nGo to Edit Profile to set up your store."}
+        </Text>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={{ marginTop: 20, backgroundColor: "#130160", paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
+        >
+          <Text style={{ color: "#fff", fontFamily: "Nunito-SemiBold", fontSize: 16 }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView style={styles.container}>
-      <StatusBar translucent={true} backgroundColor={"transparent"} />
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <StatusBar translucent backgroundColor="transparent" />
+
+      {/* ── Hero Banner ─────────────────────────────────────── */}
       <ImageBackground
         source={require("../../../assets/vector_1.png")}
         style={styles.imgBg}
       >
+        {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerChild}>
             <Pressable onPress={() => navigation.goBack()}>
-              <MaterialIcons
-                name="arrow-back-ios"
-                color={"#C4C4C4"}
-                size={25}
-              />
+              <MaterialIcons name="arrow-back-ios" color="#C4C4C4" size={25} />
             </Pressable>
             <Text style={styles.headerText}>
-              {store?.store_name || "Hidden Finds"}
+              {store?.store_name || "Store"}
             </Text>
           </View>
-          {/* <View
-            style={{ flexDirection: "row", alignItems: "center", gap: wp(2) }}
-          >
-            <Pressable onPress={() => setFavouritePressed(!favouritePress)}>
-              <Heart_Icon
-                height={hp(4)}
-                fill={favouritePress ? "#EE2525" : "none"}
-              />
-            </Pressable>
-            <Pressable onPress={() => navigation.navigate("ShareScreen")}>
-              <Share_Icon height={hp(4)} />
-            </Pressable>
-          </View> */}
         </View>
-        <View
-          style={{
-            width: "95%",
-            alignSelf: "center",
-            justifyContent: "space-between",
-            height: hp(23),
-            flexDirection: "row",
-            marginTop: "5%",
-          }}
-        >
-          <View
-            style={{ width: "45%", height: "100%", justifyContent: "center" }}
-          >
-            <HiddenFindsImg width={"95%"} />
+
+        {/* Store profile row */}
+        <View style={styles.profileRow}>
+          {/* Left: store image or placeholder SVG */}
+          <View style={styles.profileImageContainer}>
+            {store?.store_image ? (
+              <Image
+                source={{ uri: store.store_image }}
+                style={styles.storeImage}
+              />
+            ) : (
+              <HiddenFindsImg width="95%" />
+            )}
           </View>
-          <View style={{ width: "55%" }}>
-            <View
-              style={{
-                width: "97%",
-                alignSelf: "flex-end",
-                height: "100%",
-                flexDirection: "column",
-              }}
-            >
-              <View
-                style={{
-                  height: "23%",
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  paddingHorizontal: "2%",
-                  width: "93%",
-                }}
-              >
-                <Text
-                  style={{
-                    fontFamily: "Roboto-SemiBold",
-                    borderColor: "#fff",
-                    color: "#fff",
-                    fontSize: hp(3),
-                  }}
-                >
-                  {store?.store_name || "Hidden Finds"}
-                </Text>
-                <BoldTick width={20} />
-              </View>
-              <View style={{ height: "35%", flexDirection: "row" }}>
-                <View
-                  style={{
-                    width: "50%",
-                    height: "100%",
-                    paddingLeft: "1%",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontFamily: "Roboto-ExtraBold",
-                      borderColor: "#fff",
-                      color: "#fff",
-                      fontSize: hp(3.2),
-                    }}
-                  >
-                    11K {"\n"}
-                    <Text style={{ fontSize: hp(1.8) }}>Followers</Text>
-                  </Text>
-                </View>
-                <View
-                  style={{
-                    width: "50%",
-                    height: "100%",
-                    paddingLeft: "1%",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontFamily: "Roboto-ExtraBold",
-                      borderColor: "#fff",
-                      color: "#fff",
-                      fontSize: hp(3.2),
-                    }}
-                  >
-                    12K {"\n"}
-                    <Text style={{ fontSize: hp(1.8) }}>Likes</Text>
-                  </Text>
-                </View>
-              </View>
-              <View style={{ height: "15%", justifyContent: "center" }}>
-                <Text
-                  style={{
-                    fontFamily: "Roboto-Thin",
-                    color: "#F8F8F8",
-                    fontSize: hp(1.9),
-                  }}
-                >
-                  {store?.store_email || "www.hiddenfinds.com"}
-                </Text>
-              </View>
-              <View
-                style={{
-                  height: "23%",
-                  marginTop: "3%",
-                  justifyContent: "center",
-                  width: "90%",
-                }}
-              ></View>
+
+          {/* Right: stats */}
+          <View style={styles.profileStats}>
+            {/* Name + verified */}
+            <View style={styles.storeNameRow}>
+              <Text style={styles.storeNameText} numberOfLines={1}>
+                {store?.store_name || "Store"}
+              </Text>
+              {store?.verified && <BoldTick width={20} />}
             </View>
+
+            {/* Followers + Likes */}
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{formatCount(store?.followers)}</Text>
+                <Text style={styles.statLabel}>Followers</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{formatCount(store?.likes)}</Text>
+                <Text style={styles.statLabel}>Likes</Text>
+              </View>
+            </View>
+
+            {/* Email / website */}
+            <Text style={styles.storeWebsite} numberOfLines={1}>
+              {store?.website_url || store?.store_email || ""}
+            </Text>
+
+            {/* Working hours */}
+            {store?.working_days && (
+              <Text style={styles.workingHours} numberOfLines={1}>
+                🕐 {store.working_days}
+              </Text>
+            )}
+            {store?.working_time && (
+              <Text style={styles.workingHours} numberOfLines={1}>
+                {store.working_time}
+              </Text>
+            )}
           </View>
         </View>
       </ImageBackground>
-      <View
-        style={{
-          width: "90%",
-          marginTop: "5%",
-          height: hp(7),
-          alignSelf: "center",
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <View style={styles.nearestStore}>
+
+      {/* ── Action buttons ───────────────────────────────────── */}
+      <View style={styles.actionRow}>
+        <TouchableOpacity style={styles.checkInBtn}>
           <LocationIcon />
-          <Text
-            style={{
-              fontFamily: "Nunito-SemiBold",
-              color: "#000",
-              fontSize: hp(1.9),
-            }}
-          >
-            Check In
-          </Text>
-        </View>
-        <View style={styles.nearestStoreBtn2}>
+          <Text style={styles.actionBtnText}>Check In</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.verifyBtn}>
           <GreenTick />
-          <Text
-            style={{
-              fontFamily: "Nunito-SemiBold",
-              color: "#000",
-              fontSize: hp(1.9),
-            }}
-          >
-            Verify My Bin
-          </Text>
-        </View>
+          <Text style={styles.actionBtnText}>Verify My Bin</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* ── Store info ───────────────────────────────────────── */}
       <View style={styles.contentHeader}>
-        <View style={styles.content}>
-          <Text
-            style={{
-              fontFamily: "Nunito-Bold",
-              color: "#000",
-              fontSize: hp(2.4),
-            }}
-          >
-            {store?.store_name || "HIDDEN FINDS"}
-          </Text>
-        </View>
+        <Text style={styles.storeName}>{store?.store_name?.toUpperCase() || "STORE"}</Text>
         <View style={styles.review}>
-          <FontAwesome name="star" color={"#FFD700"} size={16} />
-          <FontAwesome name="star" color={"#FFD700"} size={16} />
-          <FontAwesome name="star" color={"#FFD700"} size={16} />
-          <FontAwesome name="star" color={"#FFD700"} size={16} />
-          <FontAwesome name="star" color={"#e6e6e6"} size={16} />
-          <Text
-            style={{
-              fontFamily: "Nunito-SemiBold",
-              color: "#828282",
-              fontSize: hp(2),
-            }}
-          >
-            {" "}
-            56,890
-          </Text>
+          {renderStars(store?.ratings)}
+          <Text style={styles.reviewCount}> {store?.rating_count || 0}</Text>
         </View>
       </View>
+
       <View style={styles.contentDetails}>
-        <Text
-          style={{
-            color: "#000",
-            fontFamily: "Nunito-SemiBold",
-            fontSize: hp(1.8),
-            marginVertical: "1%",
-          }}
-        >
-          Address:{" "}
-          {store?.address ||
-            "Simandhar Status, Gota, Ahmedabad, Gujarat, India"}
-        </Text>
-        <Text
-          style={{
-            color: "#000",
-            fontFamily: "Nunito-SemiBold",
-            fontSize: hp(1.8),
-            marginVertical: "1%",
-          }}
-        >
-          Phone Number: {store?.phone_number || "123456789"}
-        </Text>
-        <Text
-          style={{
-            color: "#000",
-            fontFamily: "Nunito-SemiBold",
-            fontSize: hp(1.8),
-            marginVertical: "1%",
-          }}
-        >
-          Email: {store?.store_email || "janientrprise@gmail.com"}
-        </Text>
-        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <Text
-            style={{
-              color: "#000",
-              fontFamily: "Nunito-SemiBold",
-              fontSize: hp(1.8),
-              marginVertical: "1%",
-            }}
-          >
-            Social Media Page{" "}
-          </Text>
+        {store?.address ? (
+          <Text style={styles.detailText}>📍 {store.address}</Text>
+        ) : null}
+        {store?.phone_number ? (
+          <Text style={styles.detailText}>📞 {store.phone_number}</Text>
+        ) : null}
+        {store?.store_email ? (
+          <Text style={styles.detailText}>✉️ {store.store_email}</Text>
+        ) : null}
+
+        {/* Social media */}
+        <View style={styles.socialRow}>
+          <Text style={styles.detailText}>Social Media</Text>
           <View style={styles.socialMediaIcons}>
-            <FacebookIcon />
-            <TwitterIcon />
-            <WhatsappIcon />
-            <LinkedinIcon />
+            {store?.facebook_link ? (
+              <TouchableOpacity onPress={() => Linking.openURL(store.facebook_link).catch(() => {})}>
+                <FacebookIcon />
+              </TouchableOpacity>
+            ) : <FacebookIcon />}
+            {store?.twitter_link ? (
+              <TouchableOpacity onPress={() => Linking.openURL(store.twitter_link).catch(() => {})}>
+                <TwitterIcon />
+              </TouchableOpacity>
+            ) : <TwitterIcon />}
+            {store?.whatsapp_link ? (
+              <TouchableOpacity onPress={() => Linking.openURL(`https://wa.me/${store.whatsapp_link}`).catch(() => {})}>
+                <WhatsappIcon />
+              </TouchableOpacity>
+            ) : <WhatsappIcon />}
+            {store?.instagram_link ? (
+              <TouchableOpacity onPress={() => Linking.openURL(store.instagram_link).catch(() => {})}>
+                <LinkedinIcon />
+              </TouchableOpacity>
+            ) : <LinkedinIcon />}
           </View>
         </View>
-        {/* <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Text
-            style={{
-              color: "#000",
-              fontFamily: "Nunito-SemiBold",
-              fontSize: hp(1.9),
-              marginVertical: "1%",
-            }}
-          >
-            Daily Rates: {store?.business_timing || "$10, $8, $6, $4, $2, $1"}
-          </Text>
-        </View> */}
       </View>
-      {/* <View style={styles.trendingSection}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Trending Products</Text>
-          <TouchableOpacity
-            onPress={() =>
-              navigation.navigate("AllProductsScreen", {
-                section: "Trending Products",
-                data: trendingProducts,
-              })
-            }
-          >
-            <Text style={styles.viewAllText}>View All</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.flatListContainer}>
-          <FlatList
-            data={trendingProducts ? trendingProducts.slice(0, 7) : []}
-            renderItem={renderTrendingItem}
-            keyExtractor={(item) => item.id.toString()}
-            horizontal={true}
-            showsHorizontalScrollIndicator={false}
-            ListEmptyComponent={
-              isLoading && (
-                <ActivityIndicator
-                  size="large"
-                  color="#0000ff"
-                  style={{ padding: hp(2) }}
-                />
-              )
-            }
-          />
-        </View>
-        {trendingProducts && trendingProducts.length > 7 && (
-          <View style={styles.flatListContainer}>
-            <FlatList
-              data={trendingProducts.slice(7, 14)}
-              renderItem={renderTrendingItem}
-              keyExtractor={(item) => item.id.toString()}
-              horizontal={true}
-              showsHorizontalScrollIndicator={false}
-            />
+
+      {/* ── Trending Products ────────────────────────────────── */}
+      {trendingProducts.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Trending Products</Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate("AllProductsScreen", {
+                section: "Trending Products", data: trendingProducts,
+              })}
+            >
+              <Text style={styles.viewAllText}>View All</Text>
+            </TouchableOpacity>
           </View>
-        )}
-      </View>
-      <View style={styles.promotionSection}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>PROMOTIONS</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.flatListPad}>
+            {trendingProducts.slice(0, 7).map((item, i) => (
+              <React.Fragment key={item.id?.toString() || `t-${i}`}>
+                {renderTrendingItem({ item })}
+              </React.Fragment>
+            ))}
+          </ScrollView>
         </View>
-        <View style={styles.flatListContainer}>
-          <FlatList
-            data={promotions ? promotions.slice(0, 7) : []}
-            renderItem={renderPromotionItem}
-            keyExtractor={(item) => item.id.toString()}
-            horizontal={true}
-            showsHorizontalScrollIndicator={false}
-            ListEmptyComponent={
-              isLoading && (
-                <ActivityIndicator
-                  size="large"
-                  color="#0000ff"
-                  style={{ padding: hp(2) }}
-                />
-              )
-            }
-          />
+      )}
+
+      {/* ── Promotions ───────────────────────────────────────── */}
+      {promotions.length > 0 && (
+        <View style={[styles.section, { height: hp(30) }]}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>PROMOTIONS</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.flatListPad}>
+            {promotions.slice(0, 7).map((item, i) => (
+              <React.Fragment key={item.id?.toString() || `p-${i}`}>
+                {renderPromotionItem({ item })}
+              </React.Fragment>
+            ))}
+          </ScrollView>
         </View>
-      </View> */}
+      )}
+
+      <View style={{ height: hp(5) }} />
     </ScrollView>
   );
 };
@@ -515,1084 +369,70 @@ const StoreViewPage = () => {
 export default StoreViewPage;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  imgBg: {
-    width: "100%",
-    height: hp(41),
-    borderBottomEndRadius: 20,
-    borderBottomLeftRadius: 20,
-    backgroundColor: "#130160",
-  },
-  header: {
-    width: wp(100),
-    height: hp(7),
-    marginTop: "10%",
-    paddingHorizontal: "5%",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  headerChild: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  headerText: {
-    fontFamily: "Nunito-Bold",
-    fontSize: hp(3),
-    textAlign: "left",
-    color: "#C4C4C4",
-  },
-  slide: {
-    flex: 1,
-    width: "90%",
-    alignItems: "center",
-  },
-  image: {
-    width: "100%",
-    height: height * 0.25,
-  },
-  paginationContainer: {
-    position: "absolute",
-    left: "43%",
-    bottom: "-25%",
-    width: wp(10),
-  },
-  paginationDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#130160",
-  },
-  paginationInactiveDot: {
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-  },
-  contentHeader: {
-    width: "90%",
-    marginHorizontal: "5%",
-    marginVertical: "4%",
-    flexDirection: "row",
-    marginTop: "7%",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  content: {
-    width: "50%",
-  },
-  review: {
-    width: "50%",
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    alignItems: "center",
-  },
-  contentDetails: {
-    width: "90%",
-    marginHorizontal: "5%",
-  },
-  nearestStore: {
-    width: "48%",
-    borderWidth: 0.4,
-    borderColor: "#828282",
-    height: "90%",
-    borderRadius: 7,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: "9%",
-    borderColor: "red",
-    borderWidth: 0.8,
-  },
-  nearestStoreBtn2: {
-    width: "48%",
-    borderWidth: 0.4,
-    borderColor: "#828282",
-    height: "90%",
-    borderRadius: 7,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: "5%",
-    borderColor: "#00B813",
-    borderWidth: 0.8,
-  },
-  socialMediaIcons: {
-    width: "35%",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  totalAmounts: {
-    width: "50%",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  trendingSection: {
-    flex: 1,
-    width: "94%",
-    marginTop: "6%",
-    marginHorizontal: "3%",
-  },
-  promotionSection: {
-    flex: 1,
-    width: "94%",
-    height: hp(30),
-    marginHorizontal: "3%",
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginVertical: "2.5%",
-    paddingRight: "3%",
-  },
-  sectionTitle: {
-    fontFamily: "Nunito-Bold",
-    fontSize: hp(2.3),
-    color: "#000000",
-  },
-  viewAllText: {
-    color: "#524B6B",
-    fontSize: hp(1.9),
-    textDecorationLine: "underline",
-  },
-  flatListContainer: {
-    marginVertical: "3%",
-  },
-  favouritePressable: {
-    width: wp(47),
-    height: hp(26),
-    marginHorizontal: wp(1),
-  },
-  favouriteCard: {
-    width: wp(45),
-    height: hp(26),
-    borderRadius: 5,
-    borderWidth: 0.5,
-    borderColor: "#e6e6e6",
-  },
-  favouriteImage: {
-    width: wp(45),
-    height: hp(13),
-    borderRadius: 5,
-  },
-  favouriteDescriptionContainer: {
-    paddingHorizontal: "2.5%",
-  },
-  favouriteDescription: {
-    fontFamily: "Nunito-SemiBold",
-    color: "#000",
-    fontSize: hp(1.7),
-    margin: "0.5%",
-  },
-  favouritePriceContainer: {
-    position: "absolute",
-    bottom: "2%",
-    paddingHorizontal: "3%",
-  },
-  favouriteDiscountPrice: {
-    fontFamily: "Nunito-Bold",
-    color: "#000",
-    fontSize: hp(1.8),
-  },
-  favouritePriceText: {
-    color: "red",
-  },
-  favouriteOriginalPrice: {
-    fontFamily: "Nunito-Bold",
-    color: "#808488",
-    fontSize: hp(1.8),
-    textDecorationLine: "line-through",
-  },
-  promotionPressable: {
-    width: wp(33),
-    height: hp(23),
-    marginVertical: "5%",
-  },
-  promotionCard: {
-    width: wp(29),
-    height: hp(23),
-    borderRadius: 10,
-    elevation: 4,
-    backgroundColor: "#fff",
-    paddingLeft: "1%",
-  },
-  promotionImage: {
-    width: wp(26),
-    height: hp(12),
-    alignSelf: "center",
-  },
-  promotionContent: {
-    marginTop: "10%",
-    marginHorizontal: "3%",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  promotionTitle: {
-    fontFamily: "DMSans-Bold",
-    color: "#000",
-    fontSize: hp(1.3),
-  },
-  promotionDescription: {
-    fontFamily: "Nunito-SemiBold",
-    color: "#000",
-    fontSize: hp(1.3),
-  },
-  promotionStatus: {
-    fontFamily: "Nunito-Bold",
-    color: "#14BA9C",
-    fontSize: hp(1.5),
-    marginTop: "4%",
-  },
-  promotionDate: {
-    fontFamily: "Nunito-SemiBold",
-    color: "#000",
-    fontSize: hp(1.4),
-  },
+  container: { flex: 1, backgroundColor: "#fff" },
+  loadingContainer: { height: hp(100), justifyContent: "center", alignItems: "center", backgroundColor: "#fff" },
+
+  // Hero
+  imgBg: { width: "100%", minHeight: hp(41), borderBottomEndRadius: 20, borderBottomLeftRadius: 20, backgroundColor: "#130160" },
+  header: { width: wp(100), height: hp(7), marginTop: "10%", paddingHorizontal: "5%", flexDirection: "row", alignItems: "center" },
+  headerChild: { flexDirection: "row", alignItems: "center", gap: 6 },
+  headerText: { fontFamily: "Nunito-Bold", fontSize: hp(3), color: "#C4C4C4" },
+
+  // Profile row
+  profileRow: { width: "95%", alignSelf: "center", flexDirection: "row", justifyContent: "space-between", minHeight: hp(23), marginTop: "4%", marginBottom: "4%" },
+  profileImageContainer: { width: "43%", justifyContent: "center", alignItems: "center" },
+  storeImage: { width: "95%", height: hp(18), borderRadius: 12, resizeMode: "cover" },
+  profileStats: { width: "55%", justifyContent: "space-around", paddingLeft: "2%" },
+  storeNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  storeNameText: { fontFamily: "Roboto-SemiBold", color: "#fff", fontSize: hp(2.6), flex: 1 },
+  statsRow: { flexDirection: "row", marginTop: "3%" },
+  statItem: { width: "50%", paddingLeft: "2%" },
+  statNumber: { fontFamily: "Roboto-ExtraBold", color: "#fff", fontSize: hp(3.2) },
+  statLabel: { fontFamily: "Roboto-Regular", color: "#fff", fontSize: hp(1.8) },
+  storeWebsite: { fontFamily: "Roboto-Thin", color: "#F8F8F8", fontSize: hp(1.7), marginTop: "4%" },
+  workingHours: { fontFamily: "Roboto-Thin", color: "#ddd", fontSize: hp(1.5), marginTop: "1%" },
+
+  // Actions
+  actionRow: { width: "90%", marginTop: "5%", height: hp(7), alignSelf: "center", flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  checkInBtn: { width: "48%", borderWidth: 0.8, borderColor: "red", height: "90%", borderRadius: 7, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: "9%" },
+  verifyBtn: { width: "48%", borderWidth: 0.8, borderColor: "#00B813", height: "90%", borderRadius: 7, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: "5%" },
+  actionBtnText: { fontFamily: "Nunito-SemiBold", color: "#000", fontSize: hp(1.9) },
+
+  // Info
+  contentHeader: { width: "90%", marginHorizontal: "5%", marginTop: "5%", flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  storeName: { fontFamily: "Nunito-Bold", color: "#000", fontSize: hp(2.4) },
+  review: { flexDirection: "row", alignItems: "center" },
+  reviewCount: { fontFamily: "Nunito-SemiBold", color: "#828282", fontSize: hp(1.8) },
+  contentDetails: { width: "90%", marginHorizontal: "5%", marginTop: "3%" },
+  detailText: { color: "#000", fontFamily: "Nunito-SemiBold", fontSize: hp(1.8), marginVertical: "1.5%" },
+  socialRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginVertical: "1%" },
+  socialMediaIcons: { flexDirection: "row", gap: 10 },
+
+  // Sections
+  section: { flex: 1, width: "94%", marginTop: hp(2), marginHorizontal: "3%" },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", marginVertical: "2.5%", paddingRight: "3%" },
+  sectionTitle: { fontFamily: "Nunito-Bold", fontSize: hp(2.3), color: "#000" },
+  viewAllText: { color: "#524B6B", fontSize: hp(1.9), textDecorationLine: "underline" },
+  flatListPad: { marginVertical: "2%" },
+
+  // Trending
+  favouritePressable: { width: wp(45), height: hp(26), marginRight: wp(2) },
+  favouriteCard: { width: wp(43), height: hp(25), borderRadius: 5, elevation: 2, backgroundColor: "#fff" },
+  favouriteImage: { width: wp(43), height: hp(13), borderRadius: 5 },
+  favouriteDescriptionContainer: { paddingHorizontal: "3%", marginTop: "2%" },
+  favouriteDescription: { fontFamily: "Nunito-SemiBold", color: "#000", fontSize: hp(1.5) },
+  favouritePriceContainer: { position: "absolute", bottom: "3%", paddingHorizontal: "3%" },
+  favouriteDiscountPrice: { fontFamily: "Nunito-Bold", color: "#000", fontSize: hp(1.8) },
+  favouritePriceText: { color: "red" },
+  favouriteOriginalPrice: { fontFamily: "Nunito-Bold", color: "#808488", fontSize: hp(1.8), textDecorationLine: "line-through" },
+
+  // Promotions
+  promotionPressable: { width: wp(33), height: hp(23), marginRight: wp(1) },
+  promotionCard: { width: wp(30), height: hp(22), borderRadius: 10, elevation: 4, backgroundColor: "#fff" },
+  promotionImage: { width: "100%", height: hp(12), borderRadius: 10 },
+  promotionContent: { paddingHorizontal: "5%", marginTop: "4%" },
+  promotionTitle: { fontFamily: "Nunito-Bold", color: "#000", fontSize: hp(1.4) },
+  promotionDescription: { fontFamily: "Nunito-SemiBold", color: "#555", fontSize: hp(1.3) },
+  promotionStatus: { fontFamily: "Nunito-Bold", color: "#14BA9C", fontSize: hp(1.4), marginTop: "4%" },
+  promotionDate: { fontFamily: "Nunito-SemiBold", color: "#000", fontSize: hp(1.3) },
 });
-// import {
-//   Dimensions,
-//   FlatList,
-//   Image,
-//   ImageBackground,
-//   Pressable,
-//   ScrollView,
-//   StatusBar,
-//   StyleSheet,
-//   Text,
-//   TextInput,
-//   TouchableOpacity,
-//   View,
-// } from "react-native";
-// import {
-//   widthPercentageToDP as wp,
-//   heightPercentageToDP as hp,
-// } from "react-native-responsive-screen";
-// import React, { useRef, useState } from "react";
-// import { useNavigation } from "@react-navigation/native";
-// import MaterialIcons from "react-native-vector-icons/MaterialIcons";
-// import Ionicons from "react-native-vector-icons/Ionicons";
-// import FontAwesome from "react-native-vector-icons/FontAwesome";
-// import Carousel, { Pagination } from "react-native-snap-carousel";
-// import LocationIcon from "../../../assets/LocationIcon.svg";
-// import HeartIcon from "../../../assets/HeartIcon.svg";
-// import FacebookIcon from "../../../assets/FacebookIcon.svg";
-// import TwitterIcon from "../../../assets/TwitterIcon.svg";
-// import WhatsappIcon from "../../../assets/WhatsappIcon.svg";
-// import LinkedinIcon from "../../../assets/LinkedinIcon.svg";
-// import SharedIcon from "../../../assets/SharedIcon.svg";
-// import RatingsSummary from "../../Components/RatingsSummary";
-// import Heart_Icon from "../../../assets/heart_icon.svg";
-// import Share_Icon from "../../../assets/share_icon.svg";
-// import HiddenFindsImg from "../../../assets/hidden_find_img.svg";
-// import BoldTick from "../../../assets/bold_tick.svg";
-// import GreenTick from "../../../assets/green_tick.svg";
-// import { Star, Heart } from "lucide-react-native";
-
-// const { width, height } = Dimensions.get("window");
-// const StoreViewPage = () => {
-//   const navigation = useNavigation();
-//   const [favouritePress, setFavouritePressed] = useState(false);
-//   const [activeSlide, setActiveSlide] = useState(1);
-//   const carouselImages = [
-//     {
-//       id: 1,
-//       image: require("../../../assets/bin_store_img.png"),
-//     },
-//     {
-//       id: 2,
-//       image: require("../../../assets/bin_store_img.png"),
-//     },
-//     {
-//       id: 3,
-//       image: require("../../../assets/bin_store_img.png"),
-//     },
-//   ];
-//   const myFavourites = [
-//     {
-//       id: 1,
-//       image: require("../../../assets/gray_img.png"),
-//       title: "COLGATE",
-//       description: `IWC Schaffhausen 2021 Pilot's Watch "SIHH 2019" 44mm`,
-//       discountPrice: "$65",
-//       originalPrice: "$151",
-//       totalDiscount: "60% off",
-//     },
-//     {
-//       id: 2,
-//       image: require("../../../assets/gray_img.png"),
-//       title: "COLGATE",
-//       description: `Labbin White Sneakers For Men and Female`,
-//       discountPrice: "$650",
-//       originalPrice: "$125",
-//       totalDiscount: "70% off",
-//     },
-//     {
-//       id: 3,
-//       image: require("../../../assets/gray_img.png"),
-//       title: "COLGATE",
-//       description: `Mammon Women's Handbag (Set of 3, Beige)`,
-//       discountPrice: "$75",
-//       originalPrice: "$199",
-//       totalDiscount: "60% off",
-//     },
-//     {
-//       id: 4,
-//       image: require("../../../assets/gray_img.png"),
-//       title: "COLGATE",
-//       description: `IWC Schaffhausen 2021 Pilot's Watch "SIHH 2019" 44mm`,
-//       discountPrice: "$65",
-//       originalPrice: "$151",
-//       totalDiscount: "60% off",
-//     },
-//     {
-//       id: 5,
-//       image: require("../../../assets/gray_img.png"),
-//       title: "COLGATE",
-//       description: `Labbin White Sneakers For Men and Female`,
-//       discountPrice: "$650",
-//       originalPrice: "$125",
-//       totalDiscount: "70% off",
-//     },
-//     {
-//       id: 6,
-//       image: require("../../../assets/gray_img.png"),
-//       title: "COLGATE",
-//       description: `Mammon Women's Handbag (Set of 3, Beige)`,
-//       discountPrice: "$75",
-//       originalPrice: "$199",
-//       totalDiscount: "60% off",
-//     },
-//   ];
-//   const products = [
-//     {
-//       id: "1",
-//       name: "TMA-2 HD Wireless",
-//       subtitle: "Hidden Finds",
-//       rating: 4.8,
-//       reviews: 88,
-//       image: "https://placeholder.com/150",
-//     },
-//     {
-//       id: "2",
-//       name: "TMA-2 HD Wireless",
-//       subtitle: "ANC Store",
-//       rating: 4.8,
-//       reviews: 88,
-//       image: "https://placeholder.com/150",
-//     },
-//     {
-//       id: "3",
-//       name: "TMA-2 HD Wireless",
-//       subtitle: "Hidden Finds",
-//       rating: 4.8,
-//       reviews: 88,
-//       image: "https://placeholder.com/150",
-//     },
-//   ];
-//   const renderItem = ({ item, index }) => {
-//     return (
-//       <View style={styles.slide}>
-//         <Image source={item.image} style={styles.image} />
-//       </View>
-//     );
-//   };
-//   const renderMyFavourites = ({ item }) => (
-//     <View style={{ width: wp(47), height: hp(26) }}>
-//       <View
-//         style={{
-//           width: wp(45),
-//           height: hp(26),
-//           borderRadius: 5,
-//           borderWidth: 0.5,
-//           borderColor: "#e6e6e6",
-//         }}
-//       >
-//         <Image
-//           source={item.image}
-//           style={{ width: wp(45), height: hp(13), borderRadius: 5 }}
-//         />
-//         <View style={{ paddingHorizontal: "1%" }}>
-//           <Text
-//             style={{
-//               fontFamily: "Nunito-SemiBold",
-//               color: "#000",
-//               fontSize: hp(1.7),
-//               margin: "0.5%",
-//             }}
-//           >
-//             {item.description}
-//           </Text>
-//         </View>
-//         <View
-//           style={{
-//             position: "absolute",
-//             bottom: "2%",
-//             paddingHorizontal: "3%",
-//           }}
-//         >
-//           <View>
-//             <Text
-//               style={{
-//                 fontFamily: "Nunito-Bold",
-//                 color: "#000",
-//                 fontSize: hp(1.8),
-//               }}
-//             >
-//               {item.discountPrice}
-//             </Text>
-//             <Text style={{ color: "red" }}>
-//               <Text
-//                 style={{
-//                   fontFamily: "Nunito-Bold",
-//                   color: "#808488",
-//                   fontSize: hp(1.8),
-//                   textDecorationLine: "line-through",
-//                 }}
-//               >
-//                 {item.originalPrice}
-//               </Text>
-//               {"  "}
-//               {item.totalDiscount}
-//             </Text>
-//           </View>
-//         </View>
-//       </View>
-//     </View>
-//   );
-//   const pagination = () => {
-//     return (
-//       <Pagination
-//         dotsLength={carouselImages.length}
-//         activeDotIndex={activeSlide}
-//         containerStyle={styles.paginationContainer}
-//         dotStyle={styles.paginationDot}
-//         inactiveDotStyle={styles.paginationInactiveDot}
-//         inactiveDotOpacity={0.3}
-//         inactiveDotScale={0.7}
-//       />
-//     );
-//   };
-
-//   return (
-//     <ScrollView style={styles.container}>
-//       <View style={styles.imgBg}>
-//         <View style={styles.header}>
-//           <View style={styles.headerChild}>
-//             <View style={{ flexDirection: "row" }}>
-//               <Pressable onPress={() => navigation.goBack()}>
-//                 <MaterialIcons
-//                   name="arrow-back-ios"
-//                   color={"#768190"}
-//                   size={25}
-//                 />
-//               </Pressable>
-//               <Text style={styles.headerText}>Hidden Finds</Text>
-//             </View>
-//           </View>
-//           {/* <View
-//             style={{
-//               flexDirection: "row",
-//               alignItems: "center",
-//               justifyContent: "space-between",
-//               width: "23%",
-//             }}
-//           >
-//             <Pressable onPress={() => navigation.goBack()}>
-//               <Heart_Icon height={hp(4)} />
-//             </Pressable>
-//             <Pressable onPress={() => navigation.goBack()}>
-//               <Share_Icon height={hp(4)} />
-//             </Pressable>
-//           </View> */}
-//         </View>
-//         <View
-//           style={{
-//             width: "95%",
-//             alignSelf: "center",
-//             justifyContent: "space-between",
-//             height: hp(23),
-//             flexDirection: "row",
-//             marginTop: "5%",
-//           }}
-//         >
-//           <View
-//             style={{ width: "45%", height: "100%", justifyContent: "center" }}
-//           >
-//             <HiddenFindsImg width={"95%"} />
-//           </View>
-//           <View style={{ width: "55%" }}>
-//             <View
-//               style={{
-//                 width: "97%",
-//                 alignSelf: "flex-end",
-//                 height: "100%",
-//                 flexDirection: "column",
-//               }}
-//             >
-//               <View
-//                 style={{
-//                   height: "23%",
-//                   flexDirection: "row",
-//                   justifyContent: "space-between",
-//                   alignItems: "center",
-//                   paddingHorizontal: "2%",
-//                   width: "93%",
-//                 }}
-//               >
-//                 <Text
-//                   style={{
-//                     fontFamily: "Roboto-SemiBold",
-//                     borderColor: "#fff",
-//                     color: "#fff",
-//                     fontSize: hp(3),
-//                   }}
-//                 >
-//                   Hidden Finds
-//                 </Text>
-//                 <BoldTick width={20} />
-//               </View>
-//               <View style={{ height: "35%", flexDirection: "row" }}>
-//                 <View
-//                   style={{
-//                     width: "50%",
-//                     height: "100%",
-//                     paddingLeft: "1%",
-//                     justifyContent: "center",
-//                   }}
-//                 >
-//                   <Text
-//                     style={{
-//                       fontFamily: "Roboto-ExtraBold",
-//                       borderColor: "#fff",
-//                       color: "#fff",
-//                       fontSize: hp(3.2),
-//                     }}
-//                   >
-//                     11K {"\n"}
-//                     <Text style={{ fontSize: hp(1.8) }}>Followers</Text>
-//                   </Text>
-//                 </View>
-//                 <View
-//                   style={{
-//                     width: "50%",
-//                     height: "100%",
-//                     paddingLeft: "1%",
-//                     justifyContent: "center",
-//                   }}
-//                 >
-//                   <Text
-//                     style={{
-//                       fontFamily: "Roboto-ExtraBold",
-//                       borderColor: "#fff",
-//                       color: "#fff",
-//                       fontSize: hp(3.2),
-//                     }}
-//                   >
-//                     12K {"\n"}
-//                     <Text style={{ fontSize: hp(1.8) }}>Likes</Text>
-//                   </Text>
-//                 </View>
-//               </View>
-//               <View style={{ height: "15%", justifyContent: "center" }}>
-//                 <Text
-//                   style={{
-//                     fontFamily: "Roboto-Thin",
-//                     color: "#F8F8F8",
-//                     fontSize: hp(1.9),
-//                   }}
-//                 >
-//                   www.hiddenfinds.com
-//                 </Text>
-//               </View>
-//               <View
-//                 style={{
-//                   height: "23%",
-//                   marginTop: "3%",
-//                   justifyContent: "center",
-//                   width: "90%",
-//                 }}
-//               >
-//               </View>
-//             </View>
-//           </View>
-//         </View>
-//       </View>
-//       <View
-//         style={{
-//           width: "90%",
-//           marginTop: "5%",
-//           height: hp(7),
-//           alignSelf: "center",
-//           flexDirection: "row",
-//           justifyContent: "space-between",
-//           alignItems: "center",
-//         }}
-//       >
-//         {/* <View style={styles.storeButtonsContainer}> */}
-//         <View style={styles.nearestStore}>
-//           <LocationIcon />
-//           <Text
-//             style={{
-//               fontFamily: "Nunito-SemiBold",
-//               color: "#000",
-//               fontSize: hp(1.9),
-//             }}
-//           >
-//             Check In
-//           </Text>
-//         </View>
-//         <View style={styles.nearestStoreBtn2}>
-//           <GreenTick />
-//           <Text
-//             style={{
-//               fontFamily: "Nunito-SemiBold",
-//               color: "#000",
-//               fontSize: hp(1.9),
-//             }}
-//           >
-//             Verify My Bin
-//           </Text>
-//         </View>
-//         {/* </View> */}
-//       </View>
-//       <View style={styles.contentHeader}>
-//         <View style={styles.content}>
-//           <Text
-//             style={{
-//               fontFamily: "Nunito-Bold",
-//               color: "#000",
-//               fontSize: hp(2.4),
-//             }}
-//           >
-//             HIDDEN FINDS
-//           </Text>
-//         </View>
-//         <View style={styles.review}>
-//           <FontAwesome name="star" color={"#FFD700"} size={16} />
-//           <FontAwesome name="star" color={"#FFD700"} size={16} />
-//           <FontAwesome name="star" color={"#FFD700"} size={16} />
-//           <FontAwesome name="star" color={"#FFD700"} size={16} />
-//           <FontAwesome name="star" color={"#e6e6e6"} size={16} />
-//           <Text
-//             style={{
-//               fontFamily: "Nunito-SemiBold",
-//               color: "#828282",
-//               fontSize: hp(2),
-//             }}
-//           >
-//             {" "}
-//             56,890
-//           </Text>
-//         </View>
-//       </View>
-//       <View style={styles.contentDetails}>
-//         <Text
-//           style={{
-//             color: "#000",
-//             fontFamily: "Nunito-SemiBold",
-//             fontSize: hp(1.8),
-//             marginVertical: "1%",
-//           }}
-//         >
-//           Address:{" "}
-//         </Text>
-//         <Text
-//           style={{
-//             color: "#000",
-//             fontFamily: "Nunito-SemiBold",
-//             fontSize: hp(1.8),
-//             marginVertical: "1%",
-//           }}
-//         >
-//           Phone Number:{" "}
-//         </Text>
-//         <Text
-//           style={{
-//             color: "#000",
-//             fontFamily: "Nunito-SemiBold",
-//             fontSize: hp(1.8),
-//             marginVertical: "1%",
-//           }}
-//         >
-//           Email{" "}
-//         </Text>
-//         <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-//           <Text
-//             style={{
-//               color: "#000",
-//               fontFamily: "Nunito-SemiBold",
-//               fontSize: hp(1.8),
-//               marginVertical: "1%",
-//             }}
-//           >
-//             Social Media Page{" "}
-//           </Text>
-//           <View style={styles.socialMediaIcons}>
-//             <FacebookIcon />
-//             <TwitterIcon />
-//             <WhatsappIcon />
-//             <LinkedinIcon />
-//           </View>
-//         </View>
-//         <View style={{ flexDirection: "row", alignItems: "center" }}>
-//           <Text
-//             style={{
-//               color: "#000",
-//               fontFamily: "Nunito-SemiBold",
-//               fontSize: hp(1.9),
-//               marginVertical: "1%",
-//             }}
-//           >
-//             Daily Rates:{" "}
-//           </Text>
-//           <View style={styles.totalAmounts}>
-//             <Text
-//               style={{
-//                 color: "#524B6B",
-//                 fontFamily: "Nunito-SemiBold",
-//                 fontSize: hp(1.9),
-//                 marginVertical: "1%",
-//               }}
-//             >
-//               $10, $8, $6, $4, $2, $1
-//             </Text>
-//           </View>
-//         </View>
-//       </View>
-//       {/* TRENDING PRODUCTS  */}
-//       <View style={{ flex: 1, width: "100%", height: hp(35), marginTop: "5%" }}>
-//         <View style={{ paddingHorizontal: "5%" }}>
-//           <View
-//             style={{
-//               flexDirection: "row",
-//               justifyContent: "space-between",
-//               marginVertical: "2.5%",
-//             }}
-//           >
-//             <Text
-//               style={{
-//                 fontFamily: "Nunito-Bold",
-//                 fontSize: hp(2.3),
-//                 color: "#000000",
-//               }}
-//             >
-//               Trending Products
-//             </Text>
-//             <TouchableOpacity>
-//               <Text
-//                 style={{
-//                   color: "#524B6B",
-//                   fontSize: hp(1.9),
-//                   textDecorationLine: "underline",
-//                 }}
-//               >
-//                 View All
-//               </Text>
-//             </TouchableOpacity>
-//           </View>
-//           <View style={{ marginVertical: "3%" }}>
-//             <FlatList
-//               data={myFavourites}
-//               renderItem={renderMyFavourites}
-//               keyExtractor={(item) => item.id.toString()}
-//               horizontal={true}
-//               showsHorizontalScrollIndicator={false}
-//             />
-//           </View>
-//         </View>
-//       </View>
-//       {/* TRENDING PRODUCTS  */}
-//       {/* <View style={{ flex: 1, width: '100%', height: hp(35), marginTop: '2%' }}> */}
-//       <View style={{ paddingHorizontal: "5%" }}>
-//         <View
-//           style={{
-//             flexDirection: "row",
-//             justifyContent: "space-between",
-//             marginVertical: "2.5%",
-//           }}
-//         >
-//           <Text
-//             style={{
-//               fontFamily: "Nunito-Bold",
-//               fontSize: hp(2.3),
-//               color: "#000000",
-//             }}
-//           >
-//             PROMOTIONS
-//           </Text>
-//         </View>
-//         <View style={{ flex: 1, width: "100%", marginTop: "10%" }}>
-//           <FlatList
-//             data={products}
-//             renderItem={({ item }) => (
-//               <TouchableOpacity
-//                 style={styles.card}
-//                 onPress={() => navigation.navigate("SinglePageItem")}
-//               >
-//                 <Image
-//                   source={require("../../../assets/dummy_product.png")}
-//                   style={styles.image}
-//                 />
-//                 <Ionicons
-//                   name="heart"
-//                   size={hp(2.5)}
-//                   color={"#EE2525"}
-//                   style={{ position: "absolute", right: "9%", top: "4%" }}
-//                 />
-//                 <Text style={styles.name}>{item.name}</Text>
-//                 <Text style={styles.subtitle}>{item.subtitle}</Text>
-//                 <View style={styles.ratingContainer}>
-//                   <Star size={12} color="#FFD700" fill="#FFD700" />
-//                   <Text style={styles.rating}>{item.rating}</Text>
-//                   <Text style={styles.reviews}>{item.reviews} Reviews</Text>
-//                 </View>
-//               </TouchableOpacity>
-//             )}
-//             keyExtractor={(item) => item.id}
-//             numColumns={3}
-//             contentContainerStyle={styles.grid}
-//           />
-//         </View>
-//       </View>
-//       {/* </View> */}
-//     </ScrollView>
-//   );
-// };
-
-// export default StoreViewPage;
-
-// const styles = StyleSheet.create({
-//   container: {
-//     flex: 1,
-//     backgroundColor: "#fff",
-//   },
-//   vector: {
-//     flex: 1,
-//     width: wp(100),
-//     height: hp(42),
-//   },
-//   imgBg: {
-//     borderWidth: 1,
-//     borderColor: "black",
-//     width: "100%",
-//     height: hp(41),
-//     // position: 'absolute',
-//     borderBottomEndRadius: 20,
-//     borderBottomLeftRadius: 20,
-//     backgroundColor: "#130160",
-//     // backgroundColor: 'red'
-//   },
-//   header: {
-//     width: wp(100),
-//     height: hp(7),
-//     marginTop: "10%",
-//     paddingHorizontal: "5%",
-//     flexDirection: "row",
-//     alignItems: "center",
-//     justifyContent: "space-between",
-//   },
-//   headerChild: {
-//     flexDirection: "row",
-//     alignItems: "center",
-//     width: wp(100),
-//     justifyContent: "space-between",
-//     flex: 1,
-//   },
-//   headerText: {
-//     fontFamily: "Nunito-Bold",
-//     fontSize: hp(3.4),
-//     textAlign: "left",
-//     color: "#0D0140",
-//   },
-//   slider: {
-//     width: "90%",
-//     borderColor: "#000",
-//     marginHorizontal: "5%",
-//     height: height * 0.25,
-//     marginTop: "4%",
-//   },
-//   slide: {
-//     flex: 1,
-//     width: "90%",
-//     alignItems: "center",
-//   },
-//   image: {
-//     width: "100%",
-//     height: height * 0.25,
-//   },
-//   paginationContainer: {
-//     position: "absolute",
-//     left: "43%",
-//     bottom: "-25%",
-//     width: wp(10),
-//   },
-//   paginationDot: {
-//     width: 10,
-//     height: 10,
-//     borderRadius: 5,
-//     backgroundColor: "#130160",
-//   },
-//   paginationInactiveDot: {
-//     backgroundColor: "rgba(0, 0, 0, 0.3)",
-//   },
-//   contentHeader: {
-//     width: "90%",
-//     marginHorizontal: "5%",
-//     marginVertical: "4%",
-//     flexDirection: "row",
-//     marginTop: "7%",
-//     alignItems: "center",
-//     justifyContent: "center",
-//   },
-//   content: {
-//     width: "50%",
-//   },
-//   review: {
-//     width: "50%",
-//     flexDirection: "row",
-//     justifyContent: "flex-end",
-//     alignItems: "center",
-//   },
-//   contentDetails: {
-//     width: "90%",
-//     marginHorizontal: "5%",
-//   },
-//   storeButtonsContainer: {
-//     width: "80%",
-//     height: hp(4),
-//     alignSelf: "center",
-//     // marginVertical: '5%',
-//     flexDirection: "row",
-//     justifyContent: "space-between",
-//   },
-//   nearestStore: {
-//     width: "48%",
-//     borderWidth: 0.4,
-//     borderColor: "#828282",
-//     height: "90%",
-//     borderRadius: 7,
-//     flexDirection: "row",
-//     justifyContent: "space-between",
-//     alignItems: "center",
-//     paddingHorizontal: "9%",
-//     borderColor: "red",
-//     borderWidth: 0.8,
-//   },
-//   nearestStoreBtn2: {
-//     width: "48%",
-//     borderWidth: 0.4,
-//     borderColor: "#828282",
-//     height: "90%",
-//     borderRadius: 7,
-//     flexDirection: "row",
-//     justifyContent: "space-between",
-//     alignItems: "center",
-//     paddingHorizontal: "5%",
-//     borderColor: "#00B813",
-//     borderWidth: 0.8,
-//   },
-//   bottomButtons: {
-//     width: "90%",
-//     height: hp(7.5),
-//     justifyContent: "center",
-//     alignSelf: "center",
-//     marginTop: "3%",
-//     flexDirection: "row",
-//     justifyContent: "space-between",
-//   },
-//   viewSimilar: {
-//     width: "48%",
-//     borderWidth: 0.4,
-//     borderColor: "#828282",
-//     height: hp(5.4),
-//     borderRadius: 7,
-//     flexDirection: "row",
-//     justifyContent: "space-evenly",
-//     alignItems: "center",
-//     paddingHorizontal: "3%",
-//   },
-//   socialMediaIcons: {
-//     width: "35%",
-//     flexDirection: "row",
-//     justifyContent: "space-between",
-//   },
-//   totalAmounts: {
-//     width: "50%",
-//     flexDirection: "row",
-//     justifyContent: "space-between",
-//   },
-//   header: {
-//     width: wp(100),
-//     height: hp(7),
-//     marginTop: "10%",
-//     paddingHorizontal: "5%",
-//     flexDirection: "row",
-//     alignItems: "center",
-//     justifyContent: "space-between",
-//   },
-//   headerChild: {
-//     flexDirection: "row",
-//     alignItems: "center",
-//     justifyContent: "space-between",
-//   },
-//   headerText: {
-//     fontFamily: "Nunito-Bold",
-//     fontSize: hp(3),
-//     textAlign: "left",
-//     color: "#C4C4C4",
-//   },
-//   card: {
-//     width: "30%", // Adjust the width to allow space between columns
-//     flex: 1,
-//     backgroundColor: "#fff",
-//     borderRadius: 8,
-//     padding: "2%",
-//     shadowColor: "#000",
-//     shadowOffset: { width: 0, height: 2 },
-//     shadowOpacity: 0.1,
-//     shadowRadius: 4,
-//     elevation: 3,
-//     marginHorizontal: "0.5%",
-//     marginBottom: "2%", // Add spacing between rows
-//   },
-//   image: {
-//     width: "100%",
-//     marginBottom: 10,
-//   },
-//   name: {
-//     fontSize: hp(1.45),
-//     fontWeight: "500",
-//     marginBottom: 4,
-//     color: "#000",
-//   },
-//   subtitle: {
-//     fontSize: hp(1.7),
-//     color: "#14BA9C",
-//     fontWeight: "bold",
-//     marginBottom: 8,
-//   },
-//   ratingContainer: {
-//     flexDirection: "row",
-//     alignItems: "center",
-//     marginBottom: 4,
-//   },
-//   rating: {
-//     // marginLeft: 4,
-//     fontSize: hp(1.5),
-//     fontWeight: "bold",
-//     color: "#000",
-//   },
-//   reviews: {
-//     marginLeft: 4,
-//     fontSize: hp(1.2),
-//     color: "#666",
-//   },
-//   heartButton: {
-//     position: "absolute",
-//     bottom: "2%",
-//     right: "1%",
-//     borderRadius: 15,
-//     padding: 5,
-//   },
-// });
