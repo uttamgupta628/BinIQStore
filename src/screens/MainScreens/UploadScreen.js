@@ -39,7 +39,7 @@ const UploadScreen = () => {
   const [categories, setCategories] = useState([]);
 
   // Type selector: 1 = Trending, 2 = Activity Feed
-  const [selectedType, setSelectedType] = useState(null);
+const selectedType = 2;
 
   // Images
   const [photoLocal, setPhotoLocal] = useState(null);
@@ -114,7 +114,6 @@ const UploadScreen = () => {
     if (!title.trim()) { Alert.alert("Error", "Please enter a title."); return; }
     if (!description.trim()) { Alert.alert("Error", "Please enter a description."); return; }
     if (!categoryId) { Alert.alert("Error", "Please select a category."); return; }
-    if (!selectedType) { Alert.alert("Error", "Please select a content type."); return; }
     if (uploadingPhoto || uploadingCover) { Alert.alert("Please wait", "Images are still uploading..."); return; }
     if (!photoUrl) { Alert.alert("Error", "Please upload a photo."); return; }
     if (!coverUrl) { Alert.alert("Error", "Please upload a cover photo."); return; }
@@ -243,8 +242,8 @@ const UploadScreen = () => {
           </View>
 
           {/* Content Type */}
-          <Text style={styles.label}>Content Type</Text>
-          <View style={styles.typeRow}>
+          {/* <Text style={styles.label}>Content Type</Text> */}
+          {/* <View style={styles.typeRow}>
             <TouchableOpacity
               style={[styles.typeBtn, selectedType === 1 && styles.typeBtnActive]}
               onPress={() => setSelectedType(1)}
@@ -261,7 +260,7 @@ const UploadScreen = () => {
                 📰 Activity Feed
               </Text>
             </TouchableOpacity>
-          </View>
+          </View> */}
 
           {/* Photos */}
           <ImagePickerField

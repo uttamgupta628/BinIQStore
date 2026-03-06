@@ -30,9 +30,8 @@ const AddProduct = () => {
   const navigation = useNavigation();
   const { fetchCategories, addProduct, accessToken } = useStore();
 
-  const [openAddType, setOpenAddType] = useState(false);
   const [openCategory, setOpenCategory] = useState(false);
-  const [valueAddType, setValueAddType] = useState(null);
+  const valueAddType = 2;
   const [valueCategory, setValueCategory] = useState(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -63,20 +62,10 @@ const AddProduct = () => {
     loadCategories();
   }, [accessToken]);
 
-  const addTypeOptions = [
-    { label: "Trending", value: 1 },
-    { label: "Activity Feed", value: 2 },
-  ];
-
-  const handleOpenDropdown = (setOpen, isOpen, key) => {
-    if (isOpen) {
-      setOpen(false);
-    } else {
-      setOpen(true);
-      if (key !== "addType") setOpenAddType(false);
-      if (key !== "category") setOpenCategory(false);
-    }
-  };
+ 
+ const handleOpenDropdown = (setOpen, isOpen) => {
+  setOpen(!isOpen);
+};
 
   const pickImage = (onSelect) => {
     Alert.alert(
@@ -146,10 +135,7 @@ const AddProduct = () => {
       Alert.alert("Error", "Please select a category.");
       return;
     }
-    if (valueAddType === null || valueAddType === undefined) {
-      Alert.alert("Error", "Please select a product type.");
-      return;
-    }
+    
     if (!price || isNaN(Number(price)) || Number(price) <= 0) {
       Alert.alert("Error", "Please enter a valid price.");
       return;
@@ -216,7 +202,6 @@ const AddProduct = () => {
             setOfferPrice("");
             setQuantity("");
             setValueCategory(null);
-            setValueAddType(null);
             setImageInner(null);
             setImageOuter(null);
             navigation.goBack();
@@ -261,7 +246,7 @@ const AddProduct = () => {
       style={styles.container}
       contentContainerStyle={styles.scrollContent}
       keyboardShouldPersistTaps="handled"
-      scrollEnabled={!openCategory && !openAddType}
+      scrollEnabled={!openCategory}
     >
       <StatusBar translucent={true} backgroundColor={"transparent"} />
       <ImageBackground
@@ -317,26 +302,7 @@ const AddProduct = () => {
           </View>
 
           {/* ✅ type: 1=Trending, 2=Activity Feed */}
-          <Text style={styles.label}>Product Type</Text>
-          <View style={[styles.dropdownContainer, { zIndex: 600 }]}>
-            <DropDownPicker
-              open={openAddType}
-              value={valueAddType}
-              items={addTypeOptions}
-              setOpen={() => handleOpenDropdown(setOpenAddType, openAddType, "addType")}
-              setValue={setValueAddType}
-              setItems={() => {}}
-              placeholder="Select type"
-              style={styles.dropdown}
-              textStyle={styles.dropdownText}
-              dropDownContainerStyle={styles.dropdownContainerStyle}
-              ArrowDownIconComponent={() => (
-                <SimpleLineIcons name="arrow-down" size={20} color="#000" />
-              )}
-              onSelectItem={() => setOpenAddType(false)}
-              dropDownMaxHeight={hp(15)}
-            />
-          </View>
+         
 
           <Text style={styles.label}>Product Category</Text>
           <View style={[styles.dropdownContainer, { zIndex: 500 }]}>

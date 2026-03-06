@@ -134,7 +134,7 @@ const Dashboard3 = () => {
       </View>
 
       <View style={styles.enrollNowContainer}>
-        <Pressable style={styles.libButton}>
+        <Pressable style={styles.libButton} onPress={() => navigation.navigate('GetVerified')}>
           <Text style={styles.liBbuttonText}>Get verified</Text>
         </Pressable>
       </View>

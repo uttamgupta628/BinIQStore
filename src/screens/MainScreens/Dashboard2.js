@@ -148,7 +148,7 @@ const Dashboard2 = ({ percentage = 70 }) => {
 
       {/* Get Verified Button */}
       <View style={styles.enrollNowContainer}>
-        <Pressable style={styles.libButton}>
+        <Pressable style={styles.libButton} onPress={() => navigation.navigate('GetVerified')}>
           <Text style={styles.liBbuttonText}>Get verified</Text>
         </Pressable>
       </View>

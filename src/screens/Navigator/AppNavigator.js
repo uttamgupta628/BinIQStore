@@ -34,6 +34,8 @@ import SettingsScreen from "../MainScreens/SettingsScreen";
 import ChangePassword from "../AuthenticationScreens/ChangePassword";
 import SelectUserRole from "../OnBoardingScreens/SelectUserRole";
 import SelectPlan from "../OnBoardingScreens/SelectPlan";
+import UploadChoiceScreen from "../MainScreens/Uploadchoicescreen";
+import GetVerified from '../MainScreens/GetVerified'; 
 // import FreeSubscription from "../SubscriptionScreens/FreeSubscription";
 // import PayWall from "../SubscriptionScreens/PayWall";
 import EditProfileScreen from "../MainScreens/EditProfileScreen";
@@ -260,8 +262,20 @@ const AppNavigator = () => {
           component={AddProduct}
           options={{ headerShown: false }}
         />
+       <Stack.Screen
+          name="UploadChoiceScreen"
+          component={UploadChoiceScreen}
+          options={{
+            headerShown: false,
+            presentation: 'transparentModal',
+            animation: 'slide_from_bottom',
+            cardStyle: { backgroundColor: 'transparent' },
+          }}
+        />
+        <Stack.Screen name="GetVerified" component={GetVerified} />
       </Stack.Navigator>
     </NavigationContainer>
+
   );
 };
 

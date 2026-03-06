@@ -14,6 +14,7 @@ import {
 } from "react-native-responsive-screen";
 import ProgressBar from "../../Components/ProgressBar";
 import useStore from "../../store";
+import { useNavigation } from "@react-navigation/native";
 
 const PLACEHOLDER = require("../../../assets/dashboard_profile.png");
 
@@ -26,7 +27,7 @@ const Dashboard = ({ percentage = 70 }) => {
 
   const { user, fetchStoreDetails } = useStore();
   const store = useStore((state) => state.store);
-
+const navigation = useNavigation();
   React.useEffect(() => {
     fetchStoreDetails();
   }, []);
@@ -156,7 +157,7 @@ const Dashboard = ({ percentage = 70 }) => {
       {/* Bottom */}
       <View style={styles.bottomCardsContainer} />
       <View style={styles.enrollNowContainer}>
-        <Pressable style={styles.libButton}>
+        <Pressable style={styles.libButton} onPress={() => navigation.navigate('GetVerified')}>
           <Text style={styles.liBbuttonText}>Get verified</Text>
         </Pressable>
       </View>

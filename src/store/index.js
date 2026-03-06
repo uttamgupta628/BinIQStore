@@ -37,7 +37,6 @@ const useStore = create(
           console.log("=== FULL LOGIN RESPONSE ===", JSON.stringify(data));
           console.log("=== KEYS ===", Object.keys(data));
 
-          // Express userController login returns: { token, user_details }
           const token =
             data.token ||
             data.access ||
@@ -164,7 +163,10 @@ const useStore = create(
       // ─────────────────────────────────────────
 
       // ✅ GET /api/products/:product_id
-      fetchProductById: async (productId) => {
+      // NOTE: Falls back to a locally passed list if the backend returns 404
+      // (i.e. the dedicated route is not yet implemented on the server).
+      // Usage: fetchProductById(id, trendingProducts)
+      fetchProductById: async (productId, localDataFallback = []) => {
         try {
           const { accessToken } = useStore.getState();
           if (!accessToken) throw new Error("Access token missing");
@@ -184,6 +186,22 @@ const useStore = create(
           set({ product: data });
           return data;
         } catch (error) {
+          // ── Graceful fallback: if backend route not yet implemented (404),
+          //    find the product from the locally passed data list ─────────────
+          if (error.response?.status === 404 && localDataFallback.length > 0) {
+            console.warn(
+              "fetchProductById: /api/products/:id returned 404. " +
+              "Falling back to local data list."
+            );
+            const found = localDataFallback.find(
+              (p) => (p.id || p._id) === productId
+            );
+            if (found) {
+              console.log("✅ Found product in local data:", found);
+              set({ product: found });
+              return found;
+            }
+          }
           console.error("Fetch product by ID error:", error.message);
           if (error.response) {
             console.error("Response data:", error.response.data);
@@ -209,7 +227,6 @@ const useStore = create(
           const data = response.data;
           console.log("Categories response:", data);
 
-          // ✅ FIX: backend returns array directly, field is category_name not name
           const cats = Array.isArray(data) ? data : data.results || data.categories || [];
           return cats.map((cat) => ({
             label: cat.category_name,
@@ -226,8 +243,6 @@ const useStore = create(
       },
 
       // ✅ POST /api/products
-      // Backend uses express.json() — NO multer — so send plain JSON.
-      // image_inner and image_outer are stored as strings (local URI or S3 URL).
       addProduct: async (payload) => {
         try {
           const { accessToken } = useStore.getState();
@@ -278,7 +293,7 @@ const useStore = create(
           const products = data.results || data.products || (Array.isArray(data) ? data : []);
           return products.map((item) => ({
             id: item._id || item.id,
-            image: item.image_inner ? { uri: item.image_inner } : null,  // schema: image_inner
+            image: item.image_inner ? { uri: item.image_inner } : null,
             title: item.title,
             description: item.description,
             discountPrice: `$${item.offer_price || item.price}`,
@@ -317,7 +332,7 @@ const useStore = create(
           const products = data.results || data.products || (Array.isArray(data) ? data : []);
           return products.map((item) => ({
             id: item._id || item.id,
-            image: item.image_inner ? { uri: item.image_inner } : null,  // schema: image_inner
+            image: item.image_inner ? { uri: item.image_inner } : null,
             title: item.title,
             description: item.description,
             price: item.offer_price
@@ -351,7 +366,6 @@ const useStore = create(
           const data = response.data;
           console.log("Promotions response:", data);
 
-          // Express returns: { success: true, data: [] }
           const promotions = data.data || data.results || data.promotions || (Array.isArray(data) ? data : []);
 
           return promotions.map((item) => ({
@@ -388,14 +402,12 @@ const useStore = create(
             headers: {
               Authorization: `Bearer ${accessToken}`,
               "Content-Type": "application/json",
-              // ✅ FIX: prevent server/proxy from returning a cached response
               "Cache-Control": "no-cache",
             },
           });
 
           const data = response.data;
           console.log("Fetch store details response:", data);
-          // ✅ always overwrite Zustand store so stale image URLs don't persist
           set({ store: data });
           await AsyncStorage.setItem("store-details", JSON.stringify(data));
           return data;
@@ -415,8 +427,6 @@ const useStore = create(
       },
 
       // POST /api/stores (create) or PUT /api/stores (update)
-      // hasStore=true  → PUT  (update existing store, requires user_id in body)
-      // hasStore=false → POST (create new store)
       saveStoreDetails: async (storeData, hasStore = false) => {
         try {
           const { accessToken, user } = useStore.getState();
@@ -426,7 +436,6 @@ const useStore = create(
 
           let response;
           if (hasStore) {
-            // ✅ PUT /api/stores — update existing store
             console.log("Updating store details, store_image:", storeData.store_image);
             response = await axios.put(
               `${BASE_URL}/stores`,
@@ -439,7 +448,6 @@ const useStore = create(
               },
             );
           } else {
-            // ✅ POST /api/stores — create new store
             console.log("Creating new store...");
             response = await axios.post(
               `${BASE_URL}/stores`,
@@ -456,7 +464,6 @@ const useStore = create(
           const data = response.data;
           console.log("Save store details response:", data);
 
-          // Cache the updated store in Zustand + AsyncStorage
           const savedStore = data.store || storeData;
           set({ store: savedStore });
           await AsyncStorage.setItem("store-details", JSON.stringify(savedStore));
@@ -563,7 +570,7 @@ const useStore = create(
       },
 
       // ─────────────────────────────────────────
-      // SCANS — live under /api/users/ in Express
+      // SCANS
       // ─────────────────────────────────────────
 
       // ✅ GET /api/users/scans
@@ -594,7 +601,7 @@ const useStore = create(
         }
       },
 
-      // ✅ POST /api/users/scan  (singular — that's the Express route)
+      // ✅ POST /api/users/scan
       recordScan: async (qrData, productName, category, image) => {
         try {
           const { accessToken } = useStore.getState();
