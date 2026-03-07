@@ -1,14 +1,22 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, StatusBar, Pressable,
+  Alert, ActivityIndicator,
 } from "react-native";
 import { heightPercentageToDP as hp, widthPercentageToDP as wp } from "react-native-responsive-screen";
 import { useNavigation } from "@react-navigation/native";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
+import { useStripe } from "@stripe/stripe-react-native";
+import useStore from "../../store";
+
+const BACKEND_URL = "https://biniq.onrender.com/api";
 
 const GetVerified = () => {
   const navigation = useNavigation();
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+  const { accessToken, user } = useStore();
+  const [isLoading, setIsLoading] = useState(false);
 
   const features = [
     "✅ Verified Badge on your store profile",
@@ -22,6 +30,127 @@ const GetVerified = () => {
     "✅ Early access to new features",
     "✅ Boost visibility & sales",
   ];
+
+  const handlePayment = async () => {
+    setIsLoading(true);
+    try {
+      // Step 1: Create PaymentIntent
+      const response = await fetch(`${BACKEND_URL}/payments/create-payment-intent`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          amount: 199700,
+          currency: "usd",
+          email: user?.email,
+          name: user?.full_name,
+        }),
+      });
+
+      const data = await response.json();
+      console.log("PaymentIntent response:", data);
+
+      // ✅ Already verified — don't charge again
+      if (data.already_verified) {
+        Alert.alert(
+          "Already Verified ✅",
+          "Your store is already verified!",
+          [{ text: "OK", onPress: () => navigation.goBack() }]
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      if (!response.ok || !data.clientSecret) {
+        Alert.alert("Error", data.message || "Failed to initialize payment.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Step 2: Initialize Payment Sheet
+      const { error: initError } = await initPaymentSheet({
+        merchantDisplayName: "BinIQ",
+        paymentIntentClientSecret: data.clientSecret,
+        defaultBillingDetails: {
+          email: user?.email || "",
+          name: user?.full_name || "",
+        },
+        appearance: {
+          colors: {
+            primary: "#130160",
+            background: "#ffffff",
+            componentBackground: "#f5f5f5",
+            componentBorder: "#e0e0e0",
+            componentDivider: "#e0e0e0",
+            primaryText: "#130160",
+            secondaryText: "#524B6B",
+            componentText: "#000000",
+            placeholderText: "#999999",
+            icon: "#130160",
+            error: "#FF0000",
+          },
+          shapes: {
+            borderRadius: 12,
+            borderWidth: 0.5,
+          },
+        },
+        allowsDelayedPaymentMethods: false,
+      });
+
+      if (initError) {
+        Alert.alert("Setup Error", initError.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // Step 3: Present Payment Sheet
+      const { error: paymentError } = await presentPaymentSheet();
+
+      if (paymentError) {
+        if (paymentError.code !== "Canceled") {
+          Alert.alert("Payment Failed", paymentError.message);
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      // Step 4: Payment succeeded — confirm verification on backend
+      console.log("Payment succeeded, confirming with:", data.paymentIntentId);
+
+      const verifyResponse = await fetch(`${BACKEND_URL}/payments/confirm-verification`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ payment_intent_id: data.paymentIntentId }),
+      });
+
+      const verifyData = await verifyResponse.json();
+      console.log("Verify response:", verifyData);
+
+      if (verifyResponse.ok) {
+        Alert.alert(
+          "🎉 Congratulations!",
+          "Your store is now verified! Your verified badge is now active.",
+          [{ text: "Awesome!", onPress: () => navigation.goBack() }]
+        );
+      } else {
+        Alert.alert(
+          "Warning",
+          verifyData.message || "Payment received but verification failed. Please contact support."
+        );
+      }
+
+    } catch (error) {
+      console.error("Payment error:", error.message);
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -71,13 +200,19 @@ const GetVerified = () => {
 
         {/* CTA Button */}
         <TouchableOpacity
-          style={styles.ctaButton}
+          style={[styles.ctaButton, isLoading && styles.ctaButtonDisabled]}
           activeOpacity={0.8}
-          onPress={() => {
-            // TODO: wire up payment gateway
-          }}
+          onPress={handlePayment}
+          disabled={isLoading}
         >
-          <Text style={styles.ctaText}>Get Verified Now →</Text>
+          {isLoading ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color="#fff" size="small" />
+              <Text style={[styles.ctaText, { marginLeft: 8 }]}>Processing...</Text>
+            </View>
+          ) : (
+            <Text style={styles.ctaText}>Get Verified Now →</Text>
+          )}
         </TouchableOpacity>
 
         <Text style={styles.secureText}>🔒 Secure payment · 30-day money back guarantee</Text>
@@ -154,7 +289,9 @@ const styles = StyleSheet.create({
     paddingVertical: hp(2), alignItems: "center",
     marginBottom: hp(1.5),
   },
+  ctaButtonDisabled: { opacity: 0.6 },
   ctaText: { fontFamily: "Nunito-Bold", fontSize: hp(2.2), color: "#fff" },
+  loadingRow: { flexDirection: "row", alignItems: "center" },
 
   secureText: {
     fontFamily: "Nunito-Regular", fontSize: hp(1.5),

@@ -202,6 +202,7 @@ const AddProduct = () => {
             setOfferPrice("");
             setQuantity("");
             setValueCategory(null);
+            setValueAddType(null);
             setImageInner(null);
             setImageOuter(null);
             navigation.goBack();

@@ -17,6 +17,7 @@ const useStore = create(
       accessToken: null,
       product: null,
       store: null,
+      subscription: null, // ✅ NEW — holds active subscription data
       notifications: [],
 
       // ─────────────────────────────────────────
@@ -80,6 +81,7 @@ const useStore = create(
           user: null,
           product: null,
           store: null,
+          subscription: null, // ✅ clear on logout
           accessToken: null,
           notifications: [],
         });
@@ -158,14 +160,76 @@ const useStore = create(
         }
       },
 
+      // ✅ GET /api/users/profile  — refresh user in store
+      // FIXED: was /users/me (no such route), correct route is /users/profile
+      fetchUserProfile: async () => {
+        try {
+          const { accessToken } = useStore.getState();
+          if (!accessToken) throw new Error("Access token missing");
+
+          console.log("Fetching user profile...");
+          const response = await axios.get(`${BASE_URL}/users/profile`, { // ✅ FIXED endpoint
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          });
+
+          const data = response.data;
+          console.log("=== FETCH USER PROFILE RESPONSE ===", JSON.stringify(data));
+
+          // API may return { user: {...} } or the object directly
+          const user = data.user || data.user_details || data;
+          set({ user });
+          return user;
+        } catch (error) {
+          console.error("Fetch user profile error:", error.message);
+          if (error.response) {
+            console.error("Response data:", error.response.data);
+            console.error("Response status:", error.response.status);
+          }
+          // Non-fatal — don't throw so BinStorePage still loads
+          return null;
+        }
+      },
+
+      // ✅ GET /api/subscriptions — saves raw array to state.subscription
+      //    getSubscriptions() returns the array directly (confirmed from controller)
+      //    BinStorePage checks: subscriptionDocs.some(s => s.status === 'completed')
+      fetchActiveSubscription: async () => {
+        try {
+          const { accessToken } = useStore.getState();
+          if (!accessToken) throw new Error("Access token missing");
+
+          const response = await axios.get(`${BASE_URL}/subscriptions`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          });
+
+          const data = response.data;
+          console.log("=== RAW SUBSCRIPTION RESPONSE ===", JSON.stringify(data));
+
+          // Controller returns the array directly — save as-is
+          const docs = Array.isArray(data) ? data : [];
+          set({ subscription: docs });
+          return docs;
+        } catch (error) {
+          console.error("Fetch active subscription error:", error.message);
+          if (error.response) {
+            console.error("Response data:", error.response.data);
+            console.error("Response status:", error.response.status);
+          }
+          return null;
+        }
+      },
+
       // ─────────────────────────────────────────
       // PRODUCTS
       // ─────────────────────────────────────────
 
       // ✅ GET /api/products/:product_id
-      // NOTE: Falls back to a locally passed list if the backend returns 404
-      // (i.e. the dedicated route is not yet implemented on the server).
-      // Usage: fetchProductById(id, trendingProducts)
       fetchProductById: async (productId, localDataFallback = []) => {
         try {
           const { accessToken } = useStore.getState();
@@ -186,27 +250,17 @@ const useStore = create(
           set({ product: data });
           return data;
         } catch (error) {
-          // ── Graceful fallback: if backend route not yet implemented (404),
-          //    find the product from the locally passed data list ─────────────
           if (error.response?.status === 404 && localDataFallback.length > 0) {
-            console.warn(
-              "fetchProductById: /api/products/:id returned 404. " +
-              "Falling back to local data list."
-            );
+            console.warn("fetchProductById: 404 — falling back to local data.");
             const found = localDataFallback.find(
               (p) => (p.id || p._id) === productId
             );
             if (found) {
-              console.log("✅ Found product in local data:", found);
               set({ product: found });
               return found;
             }
           }
           console.error("Fetch product by ID error:", error.message);
-          if (error.response) {
-            console.error("Response data:", error.response.data);
-            console.error("Response status:", error.response.status);
-          }
           throw error;
         }
       },
@@ -234,10 +288,6 @@ const useStore = create(
           }));
         } catch (error) {
           console.error("Fetch categories error:", error.message);
-          if (error.response) {
-            console.error("Response data:", error.response.data);
-            console.error("Response status:", error.response.status);
-          }
           throw error;
         }
       },
@@ -247,8 +297,6 @@ const useStore = create(
         try {
           const { accessToken } = useStore.getState();
           if (!accessToken) throw new Error("Access token missing.");
-
-          console.log("Adding product...", payload);
 
           const response = await axios.post(
             `${BASE_URL}/products`,
@@ -265,10 +313,6 @@ const useStore = create(
           return data;
         } catch (error) {
           console.error("Add product error:", error.message);
-          if (error.response) {
-            console.error("Response data:", error.response.data);
-            console.error("Response status:", error.response.status);
-          }
           throw error;
         }
       },
@@ -279,7 +323,6 @@ const useStore = create(
           const { accessToken } = useStore.getState();
           if (!accessToken) throw new Error("Access token missing");
 
-          console.log("Fetching trending products...");
           const response = await axios.get(`${BASE_URL}/products/trending`, {
             headers: {
               Authorization: `Bearer ${accessToken}`,
@@ -288,8 +331,6 @@ const useStore = create(
           });
 
           const data = response.data;
-          console.log("Trending products response:", data);
-
           const products = data.results || data.products || (Array.isArray(data) ? data : []);
           return products.map((item) => ({
             id: item._id || item.id,
@@ -304,10 +345,6 @@ const useStore = create(
           }));
         } catch (error) {
           console.error("Fetch trending products error:", error.message);
-          if (error.response) {
-            console.error("Response data:", error.response.data);
-            console.error("Response status:", error.response.status);
-          }
           throw error;
         }
       },
@@ -318,7 +355,6 @@ const useStore = create(
           const { accessToken } = useStore.getState();
           if (!accessToken) throw new Error("Access token missing");
 
-          console.log("Fetching activity feed...");
           const response = await axios.get(`${BASE_URL}/products/activity`, {
             headers: {
               Authorization: `Bearer ${accessToken}`,
@@ -327,8 +363,6 @@ const useStore = create(
           });
 
           const data = response.data;
-          console.log("Activity feed response:", data);
-
           const products = data.results || data.products || (Array.isArray(data) ? data : []);
           return products.map((item) => ({
             id: item._id || item.id,
@@ -341,10 +375,6 @@ const useStore = create(
           }));
         } catch (error) {
           console.error("Fetch activity feed error:", error.message);
-          if (error.response) {
-            console.error("Response data:", error.response.data);
-            console.error("Response status:", error.response.status);
-          }
           throw error;
         }
       },
@@ -355,7 +385,6 @@ const useStore = create(
           const { accessToken } = useStore.getState();
           if (!accessToken) throw new Error("Access token missing");
 
-          console.log("Fetching promotions...");
           const response = await axios.get(`${BASE_URL}/promotions`, {
             headers: {
               Authorization: `Bearer ${accessToken}`,
@@ -364,117 +393,21 @@ const useStore = create(
           });
 
           const data = response.data;
-          console.log("Promotions response:", data);
-
           const promotions = data.data || data.results || data.promotions || (Array.isArray(data) ? data : []);
 
           return promotions.map((item) => ({
             id: item._id || item.id,
-            image: item.images?.[0] ? { uri: item.images[0] } : null,
+            image: item.banner_image ? { uri: item.banner_image } : null,
             title: item.title || item.name,
             shortDescription: item.description,
-            price: item.offer_price
-              ? `$${item.price} - $${item.offer_price}`
-              : `$${item.price}`,
+            price: item.price ? `$${item.price}` : "N/A",
+            status: item.status,
+            visibility: item.visibility,
+            start_date: item.start_date,
+            end_date: item.end_date,
           }));
         } catch (error) {
           console.error("Fetch promotions error:", error.message);
-          if (error.response) {
-            console.error("Response data:", error.response.data);
-            console.error("Response status:", error.response.status);
-          }
-          throw error;
-        }
-      },
-
-      // ─────────────────────────────────────────
-      // STORE
-      // ─────────────────────────────────────────
-
-      // ✅ GET /api/stores/my-store
-      fetchStoreDetails: async () => {
-        try {
-          const { accessToken } = useStore.getState();
-          if (!accessToken) throw new Error("Access token missing");
-
-          console.log("Fetching store details...");
-          const response = await axios.get(`${BASE_URL}/stores/my-store`, {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-              "Cache-Control": "no-cache",
-            },
-          });
-
-          const data = response.data;
-          console.log("Fetch store details response:", data);
-          set({ store: data });
-          await AsyncStorage.setItem("store-details", JSON.stringify(data));
-          return data;
-        } catch (error) {
-          if (error.response?.status === 404) {
-            console.log("No store found for this user yet — skipping.");
-            set({ store: null });
-            return null;
-          }
-          console.error("Fetch store details error:", error.message);
-          if (error.response) {
-            console.error("Response data:", error.response.data);
-            console.error("Response status:", error.response.status);
-          }
-          throw error;
-        }
-      },
-
-      // POST /api/stores (create) or PUT /api/stores (update)
-      saveStoreDetails: async (storeData, hasStore = false) => {
-        try {
-          const { accessToken, user } = useStore.getState();
-          if (!accessToken) throw new Error("Access token missing");
-
-          const userId = user?._id || user?.id;
-
-          let response;
-          if (hasStore) {
-            console.log("Updating store details, store_image:", storeData.store_image);
-            response = await axios.put(
-              `${BASE_URL}/stores`,
-              { ...storeData, user_id: userId },
-              {
-                headers: {
-                  Authorization: `Bearer ${accessToken}`,
-                  "Content-Type": "application/json",
-                },
-              },
-            );
-          } else {
-            console.log("Creating new store...");
-            response = await axios.post(
-              `${BASE_URL}/stores`,
-              storeData,
-              {
-                headers: {
-                  Authorization: `Bearer ${accessToken}`,
-                  "Content-Type": "application/json",
-                },
-              },
-            );
-          }
-
-          const data = response.data;
-          console.log("Save store details response:", data);
-
-          const savedStore = data.store || storeData;
-          set({ store: savedStore });
-          await AsyncStorage.setItem("store-details", JSON.stringify(savedStore));
-
-          return data;
-        } catch (error) {
-          console.error("Save store details error:", error.message);
-          if (error.response) {
-            console.error("Response data:", error.response.data);
-            console.error("Response status:", error.response.status);
-          }
           throw error;
         }
       },
@@ -485,7 +418,6 @@ const useStore = create(
           const { accessToken } = useStore.getState();
           if (!accessToken) throw new Error("Access token missing.");
 
-          console.log("Adding promotion...", payload);
           const response = await axios.post(
             `${BASE_URL}/promotions`,
             payload,
@@ -510,6 +442,163 @@ const useStore = create(
       },
 
       // ─────────────────────────────────────────
+      // SUBSCRIPTIONS
+      // ─────────────────────────────────────────
+
+      // ✅ GET /api/subscriptions
+      fetchSubscriptions: async () => {
+        try {
+          const { accessToken } = useStore.getState();
+          if (!accessToken) throw new Error("Access token missing");
+
+          const response = await axios.get(`${BASE_URL}/subscriptions`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          });
+
+          const data = response.data;
+          console.log("Fetch subscriptions response:", data);
+          return data;
+        } catch (error) {
+          console.error("Fetch subscriptions error:", error.message);
+          throw error;
+        }
+      },
+
+      // ✅ POST /api/subscriptions/subscribe
+      subscribe: async (plan, paymentMethod) => {
+        try {
+          const { accessToken } = useStore.getState();
+          if (!accessToken) throw new Error("Access token missing");
+
+          const response = await axios.post(
+            `${BASE_URL}/subscriptions/subscribe`,
+            { plan, payment_method: paymentMethod },
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+              },
+            },
+          );
+
+          const data = response.data;
+          console.log("Subscribe response:", data);
+          return data;
+        } catch (error) {
+          console.error("Subscribe error:", error.message);
+          throw error;
+        }
+      },
+
+      // ✅ DELETE /api/subscriptions/cancel
+      cancelSubscription: async () => {
+        try {
+          const { accessToken } = useStore.getState();
+          if (!accessToken) throw new Error("Access token missing");
+
+          const response = await axios.delete(
+            `${BASE_URL}/subscriptions/cancel`,
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+              },
+            },
+          );
+
+          const data = response.data;
+          console.log("Cancel subscription response:", data);
+          return data;
+        } catch (error) {
+          console.error("Cancel subscription error:", error.message);
+          throw error;
+        }
+      },
+
+      // ─────────────────────────────────────────
+      // STORE
+      // ─────────────────────────────────────────
+
+      // ✅ GET /api/stores/my-store
+      fetchStoreDetails: async () => {
+        try {
+          const { accessToken } = useStore.getState();
+          if (!accessToken) throw new Error("Access token missing");
+
+          const response = await axios.get(`${BASE_URL}/stores/my-store`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+              "Cache-Control": "no-cache",
+            },
+          });
+
+          const data = response.data;
+          console.log("Fetch store details response:", data);
+          set({ store: data });
+          await AsyncStorage.setItem("store-details", JSON.stringify(data));
+          return data;
+        } catch (error) {
+          if (error.response?.status === 404) {
+            console.log("No store found for this user yet — skipping.");
+            set({ store: null });
+            return null;
+          }
+          console.error("Fetch store details error:", error.message);
+          throw error;
+        }
+      },
+
+      // ✅ POST /api/stores (create) or PUT /api/stores (update)
+      saveStoreDetails: async (storeData, hasStore = false) => {
+        try {
+          const { accessToken, user } = useStore.getState();
+          if (!accessToken) throw new Error("Access token missing");
+
+          const userId = user?._id || user?.id;
+
+          let response;
+          if (hasStore) {
+            response = await axios.put(
+              `${BASE_URL}/stores`,
+              { ...storeData, user_id: userId },
+              {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "Content-Type": "application/json",
+                },
+              },
+            );
+          } else {
+            response = await axios.post(
+              `${BASE_URL}/stores`,
+              storeData,
+              {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "Content-Type": "application/json",
+                },
+              },
+            );
+          }
+
+          const data = response.data;
+          console.log("Save store details response:", data);
+
+          const savedStore = data.store || storeData;
+          set({ store: savedStore });
+          await AsyncStorage.setItem("store-details", JSON.stringify(savedStore));
+          return data;
+        } catch (error) {
+          console.error("Save store details error:", error.message);
+          throw error;
+        }
+      },
+
+      // ─────────────────────────────────────────
       // NOTIFICATIONS
       // ─────────────────────────────────────────
 
@@ -519,7 +608,6 @@ const useStore = create(
           const { accessToken } = useStore.getState();
           if (!accessToken) throw new Error("Access token missing");
 
-          console.log("Fetching notifications...");
           const response = await axios.get(`${BASE_URL}/notifications`, {
             headers: {
               Authorization: `Bearer ${accessToken}`,
@@ -533,10 +621,6 @@ const useStore = create(
           return data;
         } catch (error) {
           console.error("Fetch notifications error:", error.message);
-          if (error.response) {
-            console.error("Response data:", error.response.data);
-            console.error("Response status:", error.response.status);
-          }
           throw error;
         }
       },
@@ -561,10 +645,6 @@ const useStore = create(
           return response.data;
         } catch (error) {
           console.error("Mark notification read error:", error.message);
-          if (error.response) {
-            console.error("Response data:", error.response.data);
-            console.error("Response status:", error.response.status);
-          }
           throw error;
         }
       },
@@ -577,10 +657,6 @@ const useStore = create(
       fetchScans: async () => {
         try {
           const { accessToken } = useStore.getState();
-          console.log(
-            "fetchScans: accessToken =",
-            accessToken ? "✅ present" : "❌ MISSING",
-          );
           if (!accessToken) throw new Error("Access token missing");
 
           const response = await axios.get(`${BASE_URL}/users/scans`, {
@@ -593,10 +669,6 @@ const useStore = create(
           return response.data;
         } catch (error) {
           console.error("Fetch scans error:", error.message);
-          if (error.response) {
-            console.error("Response status:", error.response.status);
-            console.error("Response data:", error.response.data);
-          }
           throw error;
         }
       },
@@ -626,10 +698,6 @@ const useStore = create(
           return response.data;
         } catch (error) {
           console.error("Record scan error:", error.message);
-          if (error.response) {
-            console.error("Response data:", error.response.data);
-            console.error("Response status:", error.response.status);
-          }
           throw error;
         }
       },
@@ -653,10 +721,6 @@ const useStore = create(
           return response.data;
         } catch (error) {
           console.error("Delete scan error:", error.message);
-          if (error.response) {
-            console.error("Response data:", error.response.data);
-            console.error("Response status:", error.response.status);
-          }
           throw error;
         }
       },

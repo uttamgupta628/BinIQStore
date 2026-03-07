@@ -36,6 +36,7 @@ import SelectUserRole from "../OnBoardingScreens/SelectUserRole";
 import SelectPlan from "../OnBoardingScreens/SelectPlan";
 import UploadChoiceScreen from "../MainScreens/Uploadchoicescreen";
 import GetVerified from '../MainScreens/GetVerified'; 
+import SubscriptionScreen from "../MainScreens/Subscriptionscreen";
 // import FreeSubscription from "../SubscriptionScreens/FreeSubscription";
 // import PayWall from "../SubscriptionScreens/PayWall";
 import EditProfileScreen from "../MainScreens/EditProfileScreen";
@@ -273,6 +274,7 @@ const AppNavigator = () => {
           }}
         />
         <Stack.Screen name="GetVerified" component={GetVerified} />
+        <Stack.Screen name="SubscriptionScreen" component={SubscriptionScreen} />
       </Stack.Navigator>
     </NavigationContainer>
 

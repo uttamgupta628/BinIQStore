@@ -15,6 +15,7 @@ import Home from "../../../assets/Home.svg";
 import HomeFocused from "../../../assets/HomeFocused.svg";
 import User from "../../../assets/User.svg";
 import UserFocused from "../../../assets/user_focus.svg";
+import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import {
   heightPercentageToDP as hp,
   widthPercentageToDP as wp,
@@ -24,7 +25,7 @@ const Tab = createBottomTabNavigator();
 const { width } = Dimensions.get("window");
 const CIRCLE_RADIUS = wp(28);
 const ICON_SIZE = hp(3.5);
-const BUTTON_COUNT = 4;
+const BUTTON_COUNT = 4; // kept at 4 — subscription replaces one slot visually
 const SCAN_BUTTON_RADIUS = 65 / 2;
 const ICON_RADIUS =
   (CIRCLE_RADIUS - SCAN_BUTTON_RADIUS) / 2 + SCAN_BUTTON_RADIUS;
@@ -40,14 +41,32 @@ const BottomNavigator = () => {
     { name: "StoreViewPage", component: StoreViewPage },
   ];
 
+  // ✅ 3 icons: Home, Subscription, User
+  // Placed at index 0, 1, 2 — spread evenly around the circle
+  const VISIBLE_ICONS = 3;
+
   const icons = [
     {
+      name: "home",
       unfocused: <Home height={ICON_SIZE} />,
       focused: <HomeFocused height={ICON_SIZE} />,
+      onPress: (navigation) => navigation.navigate("HomeScreen"),
     },
     {
+      name: "subscription",
+      unfocused: (
+        <MaterialIcons name="card-membership" size={ICON_SIZE} color="#000" />
+      ),
+      focused: (
+        <MaterialIcons name="card-membership" size={ICON_SIZE} color="#14BA9C" />
+      ),
+      onPress: (navigation) => navigation.navigate("SubscriptionScreen"),
+    },
+    {
+      name: "profile",
       unfocused: <User height={ICON_SIZE} />,
       focused: <UserFocused height={ICON_SIZE} />,
+      onPress: (navigation) => navigation.navigate("StoreViewPage"),
     },
   ];
 
@@ -59,7 +78,7 @@ const BottomNavigator = () => {
       toValue: targetAngle,
       useNativeDriver: true,
     }).start();
-    navigation.navigate(routes[index].name);
+    icons[index].onPress(navigation);
   };
 
   const panResponder = useRef(
@@ -85,7 +104,7 @@ const BottomNavigator = () => {
             Math.round(finalAngle / (360 / BUTTON_COUNT)) % BUTTON_COUNT;
           const adjustedIndex =
             nearestIndex < 0 ? BUTTON_COUNT + nearestIndex : nearestIndex;
-          handlePress(adjustedIndex, navigation);
+          handlePress(adjustedIndex % VISIBLE_ICONS, { navigate: () => {} });
         });
       },
     })
@@ -93,7 +112,9 @@ const BottomNavigator = () => {
 
   const renderButtons = (navigation) => {
     return icons.map((icon, index) => {
-      const angle = (index * (360 / BUTTON_COUNT) - 90) * (Math.PI / 180);
+      // Spread 3 icons evenly: 0°, 120°, 240° offset by -90° to start from top
+      const angle =
+        (index * (360 / VISIBLE_ICONS) - 90) * (Math.PI / 180);
       const x = ICON_RADIUS * Math.cos(angle);
       const y = ICON_RADIUS * Math.sin(angle);
 
@@ -154,14 +175,13 @@ const BottomNavigator = () => {
 
             {/* ── + button → opens UploadChoiceScreen ──────────── */}
             <TouchableOpacity
-              onPress={() => navigation.navigate('UploadChoiceScreen')}
+              onPress={() => navigation.navigate("UploadChoiceScreen")}
               activeOpacity={0.85}
             >
               <View style={styles.scanButton}>
                 <PlusIcon size={hp(4.2)} color={"white"} />
               </View>
             </TouchableOpacity>
-
           </Animated.View>
         </View>
       )}
