@@ -35,12 +35,12 @@ const AddProduct = () => {
   const [valueCategory, setValueCategory] = useState(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [upcId, setUpcId] = useState("");        
+  const [upcId, setUpcId] = useState("");
   const [price, setPrice] = useState("");
   const [offerPrice, setOfferPrice] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [imageInner, setImageInner] = useState(null); 
-  const [imageOuter, setImageOuter] = useState(null); 
+  const [imageInner, setImageInner] = useState(null);
+  const [imageOuter, setImageOuter] = useState(null);
   const [categories, setCategories] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCategoriesLoading, setIsCategoriesLoading] = useState(false);
@@ -62,10 +62,9 @@ const AddProduct = () => {
     loadCategories();
   }, [accessToken]);
 
- 
- const handleOpenDropdown = (setOpen, isOpen) => {
-  setOpen(!isOpen);
-};
+  const handleOpenDropdown = (setOpen, isOpen) => {
+    setOpen(!isOpen);
+  };
 
   const pickImage = (onSelect) => {
     Alert.alert(
@@ -135,7 +134,6 @@ const AddProduct = () => {
       Alert.alert("Error", "Please select a category.");
       return;
     }
-    
     if (!price || isNaN(Number(price)) || Number(price) <= 0) {
       Alert.alert("Error", "Please enter a valid price.");
       return;
@@ -183,8 +181,8 @@ const AddProduct = () => {
         upc_id: upcId.trim(),
         price: Number(price),
         type: Number(valueAddType),
-        image_inner: imageInnerUrl,   
-        image_outer: imageOuterUrl,   
+        image_inner: imageInnerUrl,
+        image_outer: imageOuterUrl,
         ...(offerPrice && { offer_price: Number(offerPrice) }),
       };
 
@@ -202,7 +200,6 @@ const AddProduct = () => {
             setOfferPrice("");
             setQuantity("");
             setValueCategory(null);
-            setValueAddType(null);
             setImageInner(null);
             setImageOuter(null);
             navigation.goBack();
@@ -211,7 +208,6 @@ const AddProduct = () => {
       ]);
     } catch (error) {
       console.error("Add product error:", error.message);
-      // ✅ Show all backend validation errors clearly
       const message =
         Array.isArray(error.response?.data?.errors)
           ? error.response.data.errors.map((e) => e.msg).join("\n")
@@ -289,7 +285,6 @@ const AddProduct = () => {
             />
           </View>
 
-          {/* ✅ New required field from schema */}
           <Text style={styles.label}>UPC ID</Text>
           <View style={styles.inputContainer}>
             <TextInput
@@ -301,9 +296,6 @@ const AddProduct = () => {
               autoCapitalize="none"
             />
           </View>
-
-          {/* ✅ type: 1=Trending, 2=Activity Feed */}
-         
 
           <Text style={styles.label}>Product Category</Text>
           <View style={[styles.dropdownContainer, { zIndex: 500 }]}>
@@ -319,7 +311,7 @@ const AddProduct = () => {
                 value={valueCategory}
                 items={categories}
                 setOpen={() =>
-                  handleOpenDropdown(setOpenCategory, openCategory, "category")
+                  handleOpenDropdown(setOpenCategory, openCategory)
                 }
                 setValue={setValueCategory}
                 setItems={setCategories}
@@ -376,7 +368,6 @@ const AddProduct = () => {
             />
           </View>
 
-          {/* ✅ Two image fields matching schema: image_inner and image_outer */}
           <ImagePickerBox
             label="Inner Product Image"
             image={imageInner}
