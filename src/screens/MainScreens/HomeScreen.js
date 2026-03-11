@@ -29,6 +29,7 @@ import GiftIcon from "../../../assets/promo_Date.svg";
 import Dashboard from "./Dashboard";
 import Dashboard2 from "./Dashboard2";
 import Dashboard3 from "./Dashboard3";
+import Dashboard4 from "./Dashboard4";
 import useStore from "../../store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -144,20 +145,18 @@ const HomeScreen = ({ openDrawer }) => {
   };
 
   const carouselImages = [
-    { id: 1, isDashboard: true, styles: { width: wp(90), height: hp(43) } },
-    { id: 2, isMap: true, styles: { width: wp(100), height: hp(100) } },
-    { id: 3, image: require("../../../assets/slider_1.png"), styles: { width: wp(90), height: hp(53) } },
-  ];
-
+  { id: 1, isDashboard: true  },   // Dashboard  — slide 1
+  { id: 2, isDashboard3: true },   // Dashboard3 — slide 2
+  { id: 3, isMap: true        },   // Dashboard2 — slide 3 (store profile)
+  { id: 4, isDashboard4: true },   // Dashboard4 — slide 4 (verification plan)
+];
   const renderCarouselItem = ({ item }) => {
-    if (item.isMap) {
-      return <View style={styles.carouselItemContainer}><Dashboard2 /></View>;
-    }
-    if (item.isDashboard) {
-      return <View style={styles.carouselItemContainer}><Dashboard /></View>;
-    }
-    return <View style={styles.carouselItemContainer}><Dashboard3 /></View>;
-  };
+  if (item.isDashboard)  return <View style={styles.carouselItemContainer}><Dashboard /></View>;
+  if (item.isDashboard3) return <View style={styles.carouselItemContainer}><Dashboard3 /></View>;
+  if (item.isMap)        return <View style={styles.carouselItemContainer}><Dashboard2 /></View>;
+  if (item.isDashboard4) return <View style={styles.carouselItemContainer}><Dashboard4 /></View>;
+  return null;
+};
 
   const renderTrendingItem = ({ item }) => (
     <Pressable
@@ -505,7 +504,7 @@ const styles = StyleSheet.create({
   vector: {
     flex: 1,
     width: wp(100),
-    height: hp(78),
+    height: hp(80),
   },
   headerContainer: {
     marginTop: "6%",

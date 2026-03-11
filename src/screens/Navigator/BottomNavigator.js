@@ -1,3 +1,130 @@
+// import {
+//   Animated,
+//   Dimensions,
+//   StyleSheet,
+//   TouchableOpacity,
+//   View,
+// } from "react-native";
+// import React, { useRef } from "react";
+// import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+// import { heightPercentageToDP as hp } from "react-native-responsive-screen";
+// import HomeScreenMain from "../MainScreens/HomeScreenMain";
+// import PlusIcon from "../../../assets/plus_icon.svg";
+// import Home from "../../../assets/Home.svg";
+// import HomeFocused from "../../../assets/HomeFocused.svg";
+// import User from "../../../assets/User.svg";
+// import UserFocused from "../../../assets/user_focus.svg";
+// import { launchCamera, launchImageLibrary } from "react-native-image-picker";
+// import StoreViewPage from "../MainScreens/StoreViewPage";
+
+// const Tab = createBottomTabNavigator();
+// const BottomNavigator = () => {
+//   const tabOffsetValue = useRef(new Animated.Value(0)).current;
+//   function getWidth() {
+//     let width = Dimensions.get("window").width;
+//     width = width - 100;
+//     return width / 5;
+//   }
+//   return (
+//     <>
+//       <Tab.Navigator
+//         screenOptions={{
+//           headerShown: false,
+//           tabBarStyle: {
+//             backgroundColor: "#fff",
+//             position: "absolute",
+//             height: hp(8),
+//             borderRadius: 10,
+//             shadowColor: "#000",
+//             shadowOpacity: 0.06,
+//             shadowOffset: {
+//               width: 10,
+//               height: 10,
+//             },
+//           },
+//         }}
+//       >
+//         <Tab.Screen
+//           name="HomeScreen"
+//           component={HomeScreenMain}
+//           options={{
+//             tabBarShowLabel: false,
+//             tabBarIcon: ({ focused }) => (
+//               <View style={{ position: "absolute" }}>
+//                 {focused ? (
+//                   <HomeFocused height={hp(3.5)} />
+//                 ) : (
+//                   <Home size={hp(3.5)} />
+//                 )}
+//               </View>
+//             ),
+//           }}
+//           listeners={({ navigation, route }) => ({
+//             tabPress: (e) => {
+//               Animated.spring(tabOffsetValue, {
+//                 toValue: 0,
+//                 useNativeDriver: true,
+//               }).start();
+//             },
+//           })}
+//         />
+//         <Tab.Screen
+//           name="MapScreen"
+//           component={() => null}
+//           options={{
+//             tabBarShowLabel: false,
+//             tabBarButton: (props) => (
+//               <TouchableOpacity {...props} onPress={() => launchCamera()}>
+//                 <View
+//                   style={{
+//                     width: 65,
+//                     height: 65,
+//                     backgroundColor: "#14BA9C",
+//                     borderRadius: 50,
+//                     justifyContent: "center",
+//                     alignItems: "center",
+//                     marginBottom: 30,
+//                   }}
+//                 >
+//                   <PlusIcon size={hp(4.2)} color={"white"} />
+//                 </View>
+//               </TouchableOpacity>
+//             ),
+//           }}
+//         />
+//         <Tab.Screen
+//           name="StoreViewPage"
+//           component={StoreViewPage}
+//           options={{
+//             tabBarShowLabel: false,
+//             tabBarIcon: ({ focused }) => (
+//               <View style={{ position: "absolute" }}>
+//                 {focused ? (
+//                   <UserFocused height={hp(3.5)} />
+//                 ) : (
+//                   <User size={hp(3.5)} />
+//                 )}
+//               </View>
+//             ),
+//             tabBarStyle: { display: "none" },
+//           }}
+//           listeners={({ navigation, route }) => ({
+//             tabPress: (e) => {
+//               Animated.spring(tabOffsetValue, {
+//                 toValue: getWidth() * 4,
+//                 useNativeDriver: true,
+//               }).start();
+//             },
+//           })}
+//         />
+//       </Tab.Navigator>
+//     </>
+//   );
+// };
+
+// export default BottomNavigator;
+
+// const styles = StyleSheet.create({});
 import React, { useState, useRef } from "react";
 import {
   View,
@@ -15,18 +142,18 @@ import Home from "../../../assets/Home.svg";
 import HomeFocused from "../../../assets/HomeFocused.svg";
 import User from "../../../assets/User.svg";
 import UserFocused from "../../../assets/user_focus.svg";
-import MaterialIcons from "react-native-vector-icons/MaterialIcons";
+import { launchCamera } from "react-native-image-picker";
 import {
   heightPercentageToDP as hp,
   widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
 
 const Tab = createBottomTabNavigator();
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
 const CIRCLE_RADIUS = wp(28);
 const ICON_SIZE = hp(3.5);
-const BUTTON_COUNT = 4; // kept at 4 — subscription replaces one slot visually
-const SCAN_BUTTON_RADIUS = 65 / 2;
+const BUTTON_COUNT = 4; // Only Home and StoreViewPage
+const SCAN_BUTTON_RADIUS = 65 / 2; // Central button is 65x65
 const ICON_RADIUS =
   (CIRCLE_RADIUS - SCAN_BUTTON_RADIUS) / 2 + SCAN_BUTTON_RADIUS;
 
@@ -41,32 +168,16 @@ const BottomNavigator = () => {
     { name: "StoreViewPage", component: StoreViewPage },
   ];
 
-  // ✅ 3 icons: Home, Subscription, User
-  // Placed at index 0, 1, 2 — spread evenly around the circle
-  const VISIBLE_ICONS = 3;
-
   const icons = [
     {
-      name: "home",
       unfocused: <Home height={ICON_SIZE} />,
       focused: <HomeFocused height={ICON_SIZE} />,
-      onPress: (navigation) => navigation.navigate("HomeScreen"),
+      color: "#FF6347", // Home icon color (adjust if needed)
     },
     {
-      name: "subscription",
-      unfocused: (
-        <MaterialIcons name="card-membership" size={ICON_SIZE} color="#000" />
-      ),
-      focused: (
-        <MaterialIcons name="card-membership" size={ICON_SIZE} color="#14BA9C" />
-      ),
-      onPress: (navigation) => navigation.navigate("SubscriptionScreen"),
-    },
-    {
-      name: "profile",
       unfocused: <User height={ICON_SIZE} />,
       focused: <UserFocused height={ICON_SIZE} />,
-      onPress: (navigation) => navigation.navigate("StoreViewPage"),
+      color: "#32CD32", // User icon color (adjust if needed)
     },
   ];
 
@@ -78,7 +189,7 @@ const BottomNavigator = () => {
       toValue: targetAngle,
       useNativeDriver: true,
     }).start();
-    icons[index].onPress(navigation);
+    navigation.navigate(routes[index].name);
   };
 
   const panResponder = useRef(
@@ -104,7 +215,7 @@ const BottomNavigator = () => {
             Math.round(finalAngle / (360 / BUTTON_COUNT)) % BUTTON_COUNT;
           const adjustedIndex =
             nearestIndex < 0 ? BUTTON_COUNT + nearestIndex : nearestIndex;
-          handlePress(adjustedIndex % VISIBLE_ICONS, { navigate: () => {} });
+          handlePress(adjustedIndex, navigation);
         });
       },
     })
@@ -112,9 +223,7 @@ const BottomNavigator = () => {
 
   const renderButtons = (navigation) => {
     return icons.map((icon, index) => {
-      // Spread 3 icons evenly: 0°, 120°, 240° offset by -90° to start from top
-      const angle =
-        (index * (360 / VISIBLE_ICONS) - 90) * (Math.PI / 180);
+      const angle = (index * (360 / BUTTON_COUNT) - 90) * (Math.PI / 180);
       const x = ICON_RADIUS * Math.cos(angle);
       const y = ICON_RADIUS * Math.sin(angle);
 
@@ -172,12 +281,7 @@ const BottomNavigator = () => {
             ]}
           >
             {renderButtons(navigation)}
-
-            {/* ── + button → opens UploadChoiceScreen ──────────── */}
-            <TouchableOpacity
-              onPress={() => navigation.navigate("UploadChoiceScreen")}
-              activeOpacity={0.85}
-            >
+            <TouchableOpacity onPress={() => launchCamera()}>
               <View style={styles.scanButton}>
                 <PlusIcon size={hp(4.2)} color={"white"} />
               </View>
