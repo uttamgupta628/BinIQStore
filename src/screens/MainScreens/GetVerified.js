@@ -10,7 +10,7 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useStripe} from '@stripe/stripe-react-native';
 import useStore from '../../store';
 
-const BACKEND_URL = 'http://10.218.181.230:3001/api';
+const BACKEND_URL = 'http://192.168.1.4:3001/api';
 
 const GetVerified = () => {
   const navigation = useNavigation();

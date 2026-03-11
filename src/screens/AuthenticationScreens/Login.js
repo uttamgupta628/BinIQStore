@@ -22,20 +22,19 @@ import { useNavigation } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { API_BASE_URL } from "../../config/constants";
 import useStore from "../../store";
-import RNRestart from "react-native-restart";
 
 const { width, height } = Dimensions.get("window");
 
 const Login = () => {
   const navigation = useNavigation();
-  const { login } = useStore();
-  const [showPassword, setShowPassword] = useState(false); // Show password initially
+  const { login, fetchUserProfile } = useStore();
+  const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    console.log("API_BASE_URL:", API_BASE_URL); // Debug log
+    console.log("API_BASE_URL:", API_BASE_URL);
   }, []);
 
   const togglePasswordVisibility = () => {
@@ -43,18 +42,15 @@ const Login = () => {
   };
 
   const handleLogin = async () => {
-    // navigation.replace("HomeNavigataor");
     if (!email || !password) {
       Alert.alert("Error", "Please enter email and password");
       return;
     }
     setIsLoading(true);
     try {
-      const response = await login({ email, password });
-      Alert.alert("Success", "Login successful!");
-
-      navigation.replace("HomeNavigataor"); // Navigate to HomeScreen
-      RNRestart.restart();
+      await login({ email, password });
+      await fetchUserProfile(); // ✅ fetch fresh profile with populated subscription
+      navigation.replace("HomeNavigataor");
     } catch (error) {
       Alert.alert("Error", error.message || "Login failed");
     } finally {
@@ -73,7 +69,7 @@ const Login = () => {
         <View style={styles.welcomeContainer}>
           <Text style={styles.welcomeText}>Welcome Back</Text>
           <Text style={styles.subWelcomeText}>
-            Great to see you -{"\n"}Let’s pick up you left off!
+            Great to see you -{"\n"}Let's pick up you left off!
           </Text>
         </View>
         <View style={styles.inputContainer}>
@@ -142,7 +138,7 @@ const Login = () => {
           </View>
         </View>
         <View style={styles.registerContainer}>
-          <Text style={styles.registerPrompt}>Haven’t an account? </Text>
+          <Text style={styles.registerPrompt}>Haven't an account? </Text>
           <TouchableOpacity onPress={() => navigation.navigate("SignUp")}>
             <Text style={styles.registerLink}>Register</Text>
           </TouchableOpacity>
