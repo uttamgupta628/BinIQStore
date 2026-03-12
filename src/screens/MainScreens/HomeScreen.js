@@ -17,7 +17,6 @@ import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from "react-native-responsive-screen";
-import FontAwesome from "react-native-vector-icons/FontAwesome";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import Carousel, { Pagination } from "react-native-snap-carousel";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -33,9 +32,8 @@ import Dashboard4 from "./Dashboard4";
 import useStore from "../../store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 
-// ✅ FIX: Fallback placeholder for missing images
 const PLACEHOLDER = require("../../../assets/slider_1.png");
 
 const HomeScreen = ({ openDrawer }) => {
@@ -52,7 +50,7 @@ const HomeScreen = ({ openDrawer }) => {
   const {
     user,
     logout,
-    accessToken, // ✅ FIX: pull accessToken so we can depend on it
+    accessToken,
     fetchTrendingProducts,
     fetchActivityFeed,
     fetchPromotions,
@@ -73,9 +71,7 @@ const HomeScreen = ({ openDrawer }) => {
     loadFavorites();
   }, []);
 
-  // ✅ FIX: useFocusEffect re-fetches every time the screen comes into focus
-  // This ensures new products/feeds appear immediately after AddProduct navigates back
-  // Still guards against missing accessToken for hydration safety
+  // Re-fetches every time the screen comes into focus
   useFocusEffect(
     useCallback(() => {
       if (!accessToken) return;
@@ -122,7 +118,7 @@ const HomeScreen = ({ openDrawer }) => {
       loadTrending();
       loadActivity();
       loadPromotions();
-    }, [accessToken]) // re-run if token changes (e.g. after login)
+    }, [accessToken]),
   );
 
   const toggleFavorite = async (itemId) => {
@@ -135,7 +131,7 @@ const HomeScreen = ({ openDrawer }) => {
     setFavorites(newFavorites);
     await AsyncStorage.setItem(
       "favorites",
-      JSON.stringify(Array.from(newFavorites))
+      JSON.stringify(Array.from(newFavorites)),
     );
   };
 
@@ -144,20 +140,43 @@ const HomeScreen = ({ openDrawer }) => {
     navigation.replace("Login");
   };
 
+  // ── 4-slide carousel (from Doc 7) ─────────────────────────────────────────
   const carouselImages = [
-  { id: 1, isDashboard: true  },   // Dashboard  — slide 1
-  { id: 2, isDashboard3: true },   // Dashboard3 — slide 2
-  { id: 3, isMap: true        },   // Dashboard2 — slide 3 (store profile)
-  { id: 4, isDashboard4: true },   // Dashboard4 — slide 4 (verification plan)
-];
-  const renderCarouselItem = ({ item }) => {
-  if (item.isDashboard)  return <View style={styles.carouselItemContainer}><Dashboard /></View>;
-  if (item.isDashboard3) return <View style={styles.carouselItemContainer}><Dashboard3 /></View>;
-  if (item.isMap)        return <View style={styles.carouselItemContainer}><Dashboard2 /></View>;
-  if (item.isDashboard4) return <View style={styles.carouselItemContainer}><Dashboard4 /></View>;
-  return null;
-};
+    { id: 1, isDashboard: true }, // Dashboard        — slide 1
+    { id: 2, isDashboard3: true }, // Dashboard3       — slide 2
+    { id: 3, isMap: true }, // Dashboard2       — slide 3 (store profile)
+    { id: 4, isDashboard4: true }, // Dashboard4       — slide 4 (verification plan)
+  ];
 
+  const renderCarouselItem = ({ item }) => {
+    if (item.isDashboard)
+      return (
+        <View style={styles.carouselItemContainer}>
+          <Dashboard />
+        </View>
+      );
+    if (item.isDashboard3)
+      return (
+        <View style={styles.carouselItemContainer}>
+          <Dashboard3 />
+        </View>
+      );
+    if (item.isMap)
+      return (
+        <View style={styles.carouselItemContainer}>
+          <Dashboard2 />
+        </View>
+      );
+    if (item.isDashboard4)
+      return (
+        <View style={styles.carouselItemContainer}>
+          <Dashboard4 />
+        </View>
+      );
+    return null;
+  };
+
+  // ── Trending Products ─────────────────────────────────────────────────────
   const renderTrendingItem = ({ item }) => (
     <Pressable
       style={styles.favouritePressable}
@@ -170,27 +189,37 @@ const HomeScreen = ({ openDrawer }) => {
       }
     >
       <View style={styles.favouriteCard}>
-        {/* ✅ FIX: fallback to placeholder if image is null */}
-        <Image
-          source={item.image || PLACEHOLDER}
-          style={styles.favouriteImage}
-        />
-        <View style={styles.favouriteDescriptionContainer}>
-          <Text style={styles.favouriteDescription}>{item.description}</Text>
+        <View style={styles.imageWrapper}>
+          <Image
+            source={item.image || PLACEHOLDER}
+            style={styles.favouriteImage}
+            resizeMode="cover"
+          />
         </View>
-        <View style={styles.favouritePriceContainer}>
-          <View>
-            <Text style={styles.favouriteDiscountPrice}>{item.discountPrice}</Text>
-            <Text style={styles.favouritePriceText}>
-              <Text style={styles.favouriteOriginalPrice}>{item.originalPrice}</Text>
-              {"  "}{item.totalDiscount}
+        <View style={styles.favouriteDescriptionContainer}>
+          <Text
+            style={styles.favouriteDescription}
+            numberOfLines={2}
+            ellipsizeMode="tail"
+          >
+            {item.description}
+          </Text>
+          <Text style={styles.favouriteDiscountPrice}>
+            {item.discountPrice}
+          </Text>
+          <Text style={styles.favouritePriceText}>
+            <Text style={styles.favouriteOriginalPrice}>
+              {item.originalPrice}
             </Text>
-          </View>
+            {"  "}
+            {item.totalDiscount}
+          </Text>
         </View>
       </View>
     </Pressable>
   );
 
+  // ── Activity Feed ─────────────────────────────────────────────────────────
   const renderActivityItem = ({ item }) => (
     <Pressable
       style={styles.productPressable}
@@ -203,11 +232,14 @@ const HomeScreen = ({ openDrawer }) => {
       }
     >
       <View style={styles.productCard}>
-        {/* ✅ FIX: fallback to placeholder if image is null */}
-        <Image
-          source={item.image || PLACEHOLDER}
-          style={styles.productImage}
-        />
+        <View style={styles.imageWrapper}>
+          <Image
+            source={item.image || PLACEHOLDER}
+            style={styles.productImage}
+            resizeMode="cover"
+          />
+        </View>
+        {/* Heart icon kept from Doc 7 */}
         <TouchableOpacity
           onPress={() => toggleFavorite(item.id)}
           style={styles.heartIconContainer}
@@ -219,16 +251,27 @@ const HomeScreen = ({ openDrawer }) => {
           />
         </TouchableOpacity>
         <View style={styles.productContent}>
-          <View>
-            <Text style={styles.productTitle}>{item.title}</Text>
-            <Text style={styles.productDescription}>{item.description}</Text>
-            <Text style={styles.productPrice}>{item.price}</Text>
-          </View>
+          <Text
+            style={styles.productTitle}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {item.title}
+          </Text>
+          <Text
+            style={styles.productDescription}
+            numberOfLines={2}
+            ellipsizeMode="tail"
+          >
+            {item.description}
+          </Text>
+          <Text style={styles.productPrice}>{item.price}</Text>
         </View>
       </View>
     </Pressable>
   );
 
+  // ── Promotions ────────────────────────────────────────────────────────────
   const renderPromotionItem = ({ item }) => (
     <Pressable
       style={styles.promotionPressable}
@@ -240,27 +283,57 @@ const HomeScreen = ({ openDrawer }) => {
       }
     >
       <View style={styles.promotionCard}>
-        {/* ✅ FIX: fallback to placeholder if image is null */}
-        <Image
-          source={item.image || PLACEHOLDER}
-          style={styles.promotionImage}
-        />
+        <View style={styles.imageWrapper}>
+          <Image
+            source={item.image || PLACEHOLDER} // ✅ item.image (already mapped in store)
+            style={styles.promotionImage}
+            resizeMode="cover"
+          />
+        </View>
         <View style={styles.promotionContent}>
-          <View>
-            <Text style={styles.promotionTitle}>{item.title}</Text>
-            <Text style={styles.promotionDescription}>{item.shortDescription}</Text>
-            <Text style={styles.promotionStatus}>Active</Text>
-            <Text style={styles.promotionDate}>
-              <GiftIcon /> Jun20 to July20
-            </Text>
-          </View>
+          <Text
+            style={styles.promotionTitle}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {item.title}
+          </Text>
+          <Text
+            style={styles.promotionDescription}
+            numberOfLines={2}
+            ellipsizeMode="tail"
+          >
+            {item.shortDescription}{" "}
+            {/* ✅ shortDescription (mapped from description) */}
+          </Text>
+          <Text style={styles.promotionStatus}>{item.status || "Active"}</Text>
+          <Text style={styles.promotionDate}>
+            <GiftIcon />{" "}
+            {item.start_date
+              ? new Date(item.start_date).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                })
+              : "—"}
+            {" to "}
+            {item.end_date
+              ? new Date(item.end_date).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                })
+              : "—"}
+          </Text>
         </View>
       </View>
     </Pressable>
   );
 
   const LoadingIndicator = () => (
-    <ActivityIndicator size="large" color="#130160" style={{ padding: hp(2) }} />
+    <ActivityIndicator
+      size="large"
+      color="#130160"
+      style={{ padding: hp(2) }}
+    />
   );
 
   const EmptyComponent = ({ message = "No data available" }) => (
@@ -329,7 +402,7 @@ const HomeScreen = ({ openDrawer }) => {
         {pagination()}
       </ImageBackground>
 
-      {/* Trending Products */}
+      {/* ── Trending Products ─────────────────────────────────────────────── */}
       <View style={styles.trendingSection}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Trending Products</Text>
@@ -351,13 +424,14 @@ const HomeScreen = ({ openDrawer }) => {
             <FlatList
               data={trendingProducts.slice(0, 7)}
               renderItem={renderTrendingItem}
-              // ✅ FIX: safe keyExtractor with string fallback
               keyExtractor={(item, index) =>
                 item.id ? item.id.toString() : `trending-${index}`
               }
               horizontal={true}
               showsHorizontalScrollIndicator={false}
-              ListEmptyComponent={<EmptyComponent message="No trending products" />}
+              ListEmptyComponent={
+                <EmptyComponent message="No trending products" />
+              }
             />
           )}
         </View>
@@ -376,7 +450,7 @@ const HomeScreen = ({ openDrawer }) => {
         )}
       </View>
 
-      {/* Activity Feed */}
+      {/* ── Activity Feed ─────────────────────────────────────────────────── */}
       <View style={styles.activitySection}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>ACTIVITY FEED</Text>
@@ -398,7 +472,6 @@ const HomeScreen = ({ openDrawer }) => {
             <FlatList
               data={activityFeed.slice(0, 7)}
               renderItem={renderActivityItem}
-              // ✅ FIX: safe keyExtractor with string fallback
               keyExtractor={(item, index) =>
                 item.id ? item.id.toString() : `activity-${index}`
               }
@@ -423,7 +496,7 @@ const HomeScreen = ({ openDrawer }) => {
         )}
       </View>
 
-      {/* Promotions */}
+      {/* ── Promotions ────────────────────────────────────────────────────── */}
       <View style={styles.promotionSection}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>PROMOTIONS</Text>
@@ -434,7 +507,6 @@ const HomeScreen = ({ openDrawer }) => {
           <FlatList
             data={promotions.slice(0, 7)}
             renderItem={renderPromotionItem}
-            // ✅ FIX: safe keyExtractor with string fallback
             keyExtractor={(item, index) =>
               item.id ? item.id.toString() : `promo-${index}`
             }
@@ -445,7 +517,7 @@ const HomeScreen = ({ openDrawer }) => {
         )}
       </View>
 
-      {/* IQ Portal */}
+      {/* ── IQ Portal ─────────────────────────────────────────────────────── */}
       <View style={styles.iqPortalSection}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>IQ PORTAL</Text>
@@ -456,16 +528,31 @@ const HomeScreen = ({ openDrawer }) => {
             onPress={() => navigation.navigate("IQPortal")}
           >
             <View style={styles.iqPortalCard}>
-              <Image
-                source={require("../../../assets/reseller_training.png")}
-                style={styles.iqPortalImage}
-              />
+              <View style={styles.imageWrapper}>
+                <Image
+                  source={require("../../../assets/reseller_training.png")}
+                  style={styles.iqPortalImage}
+                  resizeMode="cover"
+                />
+              </View>
               <View style={styles.iqPortalContent}>
-                <View>
-                  <Text style={styles.iqPortalMiniHeader}>How to start a Bin Store</Text>
-                  <Text style={styles.iqPortalTitle}>Bin Store</Text>
-                  <Text style={styles.iqPortalDetails}>Full Video • With PDF</Text>
-                </View>
+                <Text
+                  style={styles.iqPortalMiniHeader}
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
+                  How to start a Bin Store
+                </Text>
+                <Text
+                  style={styles.iqPortalTitle}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  Bin Store
+                </Text>
+                <Text style={styles.iqPortalDetails}>
+                  Full Video • With PDF
+                </Text>
               </View>
             </View>
           </Pressable>
@@ -474,17 +561,28 @@ const HomeScreen = ({ openDrawer }) => {
             onPress={() => navigation.navigate("IQPortal")}
           >
             <View style={styles.iqPortalCard}>
-              <Image
-                source={require("../../../assets/reseller_training.png")}
-                style={styles.iqPortalImage}
-              />
+              <View style={styles.imageWrapper}>
+                <Image
+                  source={require("../../../assets/reseller_training.png")}
+                  style={styles.iqPortalImage}
+                  resizeMode="cover"
+                />
+              </View>
               <View style={styles.iqPortalContent}>
-                <View>
-                  <Text style={styles.iqPortalMiniHeader}>
-                    Free Direct Contract Holder Training & Supplier List
-                  </Text>
-                  <Text style={styles.iqPortalTitle}>Supplier Connect & Training</Text>
-                </View>
+                <Text
+                  style={styles.iqPortalMiniHeader}
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
+                  Free Direct Contract Holder Training & Supplier List
+                </Text>
+                <Text
+                  style={styles.iqPortalTitle}
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
+                  Supplier Connect & Training
+                </Text>
               </View>
             </View>
           </Pressable>
@@ -583,6 +681,8 @@ const styles = StyleSheet.create({
   paginationInactiveDot: {
     backgroundColor: "rgba(0, 0, 0, 0.3)",
   },
+
+  // ── Section layouts ───────────────────────────────────────────────────────
   trendingSection: {
     flex: 1,
     width: "94%",
@@ -593,18 +693,21 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "94%",
     marginHorizontal: "3%",
+    marginTop: hp(2),
   },
   promotionSection: {
     flex: 1,
     width: "94%",
-    height: hp(30),
     marginHorizontal: "3%",
+    marginTop: hp(2),
+    marginBottom: hp(1),
   },
   iqPortalSection: {
     flex: 1,
     width: "94%",
     marginHorizontal: "3%",
-    height: hp(42),
+    marginTop: hp(1),
+    marginBottom: hp(3),
   },
   sectionHeader: {
     flexDirection: "row",
@@ -623,7 +726,7 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
   flatListContainer: {
-    marginVertical: "3%",
+    marginVertical: "1%",
   },
   emptyContainer: {
     padding: hp(2),
@@ -634,180 +737,203 @@ const styles = StyleSheet.create({
     color: "#524B6B",
     fontSize: hp(1.8),
   },
+
+  // ── Shared image wrapper ──────────────────────────────────────────────────
+  imageWrapper: {
+    width: "100%",
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    overflow: "hidden",
+  },
+
+  // ── Trending (Favourite) cards ────────────────────────────────────────────
+  favouritePressable: {
+    width: wp(46),
+    marginRight: wp(3),
+    marginVertical: hp(1),
+  },
+  favouriteCard: {
+    width: "100%",
+    borderRadius: 10,
+    elevation: 3,
+    backgroundColor: "#fff",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  favouriteImage: {
+    width: "100%",
+    height: hp(15),
+  },
+  favouriteDescriptionContainer: {
+    padding: wp(2.5),
+  },
+  favouriteDescription: {
+    fontFamily: "Nunito-SemiBold",
+    color: "#000",
+    fontSize: hp(1.5),
+    marginBottom: hp(0.5),
+  },
+  favouriteDiscountPrice: {
+    fontFamily: "Nunito-Bold",
+    color: "#000",
+    fontSize: hp(1.8),
+    marginBottom: hp(0.2),
+  },
+  favouritePriceText: {
+    color: "red",
+    fontSize: hp(1.4),
+    fontFamily: "Nunito-Regular",
+  },
+  favouriteOriginalPrice: {
+    fontFamily: "Nunito-Bold",
+    color: "#808488",
+    fontSize: hp(1.5),
+    textDecorationLine: "line-through",
+  },
+
+  // ── Activity Feed cards ───────────────────────────────────────────────────
   productPressable: {
-    width: wp(51),
-    height: hp(23),
-    marginVertical: "5%",
+    width: wp(46),
+    marginRight: wp(3),
+    marginVertical: hp(1),
   },
   productCard: {
-    width: wp(49),
-    height: hp(21),
+    width: "100%",
     borderRadius: 10,
-    elevation: 2,
+    elevation: 3,
     backgroundColor: "#fff",
-    paddingLeft: "1%",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
   productImage: {
-    width: wp(49),
-    height: hp(12),
+    width: "100%",
+    height: hp(14),
   },
   heartIconContainer: {
     position: "absolute",
-    right: "2%",
-    top: "2%",
+    right: wp(2),
+    top: hp(0.5),
     zIndex: 1,
   },
   productContent: {
-    margin: "3%",
-    flexDirection: "row",
-    justifyContent: "space-between",
+    padding: wp(2.5),
   },
   productTitle: {
     fontFamily: "Nunito-SemiBold",
     color: "#0049AF",
     fontSize: hp(1.6),
+    marginBottom: hp(0.3),
   },
   productDescription: {
     fontFamily: "Nunito-SemiBold",
     color: "#000",
     fontSize: hp(1.3),
+    marginBottom: hp(0.4),
   },
   productPrice: {
     fontFamily: "Nunito-Bold",
     color: "#000",
     fontSize: hp(1.5),
   },
+
+  // ── Promotion cards ───────────────────────────────────────────────────────
   promotionPressable: {
-    width: wp(33),
-    height: hp(23),
-    marginVertical: "5%",
+    width: wp(46),
+    marginRight: wp(3),
+    marginVertical: hp(1),
   },
   promotionCard: {
-    width: wp(29),
-    height: hp(23),
+    width: "100%",
     borderRadius: 10,
-    elevation: 4,
+    elevation: 3,
     backgroundColor: "#fff",
-    paddingLeft: "1%",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
   promotionImage: {
-    width: wp(26),
-    height: hp(12),
-    alignSelf: "center",
+    width: "100%",
+    height: hp(16),
   },
   promotionContent: {
-    marginTop: "10%",
-    marginHorizontal: "3%",
-    flexDirection: "row",
-    justifyContent: "space-between",
+    padding: wp(2.5),
   },
   promotionTitle: {
     fontFamily: "DMSans-Bold",
     color: "#000",
-    fontSize: hp(1.3),
+    fontSize: hp(1.5),
+    marginBottom: hp(0.3),
   },
   promotionDescription: {
     fontFamily: "Nunito-SemiBold",
     color: "#000",
     fontSize: hp(1.3),
+    marginBottom: hp(0.2),
   },
   promotionStatus: {
     fontFamily: "Nunito-Bold",
     color: "#14BA9C",
     fontSize: hp(1.5),
-    marginTop: "4%",
+    marginTop: hp(0.5),
   },
   promotionDate: {
     fontFamily: "Nunito-SemiBold",
     color: "#000",
     fontSize: hp(1.4),
+    marginTop: hp(0.3),
   },
-  favouritePressable: {
-    width: wp(45),
-    height: hp(26),
-  },
-  favouriteCard: {
-    width: wp(43),
-    height: hp(25),
-    borderRadius: 5,
-    elevation: 2,
-    backgroundColor: "#fff",
-  },
-  favouriteImage: {
-    width: wp(43),
-    height: hp(13),
-    borderRadius: 5,
-  },
-  favouriteDescriptionContainer: {
-    paddingHorizontal: "2.5%",
-  },
-  favouriteDescription: {
-    fontFamily: "Nunito-SemiBold",
-    color: "#000",
-    fontSize: hp(1.5),
-    margin: "0.5%",
-  },
-  favouritePriceContainer: {
-    position: "absolute",
-    bottom: "2%",
-    paddingHorizontal: "3%",
-  },
-  favouriteDiscountPrice: {
-    fontFamily: "Nunito-Bold",
-    color: "#000",
-    fontSize: hp(1.8),
-  },
-  favouritePriceText: {
-    color: "red",
-  },
-  favouriteOriginalPrice: {
-    fontFamily: "Nunito-Bold",
-    color: "#808488",
-    fontSize: hp(1.8),
-    textDecorationLine: "line-through",
-  },
-  iqPortalPressable: {
-    width: wp(47),
-    height: hp(24),
-  },
-  iqPortalCard: {
-    width: wp(47),
-    height: hp(22),
-    borderRadius: 5,
-    elevation: 2,
-    backgroundColor: "#fff",
-    paddingLeft: "1%",
-  },
-  iqPortalImage: {
-    width: wp(47),
-    height: hp(11),
-    borderRadius: 5,
-  },
-  iqPortalContent: {
-    margin: "3%",
+
+  // ── IQ Portal cards ───────────────────────────────────────────────────────
+  iqPortalContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
+    marginVertical: hp(1.5),
+  },
+  iqPortalPressable: {
+    width: wp(45),
+  },
+  iqPortalCard: {
+    width: "100%",
+    borderRadius: 10,
+    elevation: 3,
+    backgroundColor: "#fff",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  iqPortalImage: {
+    width: "100%",
+    height: hp(13),
+  },
+  iqPortalContent: {
+    padding: wp(2.5),
   },
   iqPortalMiniHeader: {
     fontFamily: "Nunito-ExtraBold",
     color: "#0049AF",
     fontSize: hp(1.4),
+    marginBottom: hp(0.3),
   },
   iqPortalTitle: {
     fontFamily: "Nunito-SemiBold",
     color: "#000",
-    fontSize: hp(2.2),
-    marginVertical: "1%",
+    fontSize: hp(2),
+    marginVertical: hp(0.3),
   },
   iqPortalDetails: {
     fontFamily: "Nunito-SemiBold",
     color: "#14BA9C",
     fontSize: hp(1.5),
-    marginTop: "5%",
-  },
-  iqPortalContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginVertical: "3%",
+    marginTop: hp(0.5),
   },
 });

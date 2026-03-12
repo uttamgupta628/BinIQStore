@@ -13,6 +13,7 @@ import {
   Pressable,
   Image,
   ActivityIndicator,
+  Share,
 } from "react-native";
 import {
   heightPercentageToDP as hp,
@@ -20,7 +21,6 @@ import {
 } from "react-native-responsive-screen";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import Heart_Icon from "../../../assets/heart_icon.svg";
 import Share_Icon from "../../../assets/share_icon.svg";
 import FontAwesome from "react-native-vector-icons/FontAwesome";
 import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
@@ -29,22 +29,9 @@ import useStore from "../../store";
 
 const PLACEHOLDER = require("../../../assets/gray_img.png");
 
-/**
- * Normalises either a raw API product OR a locally-mapped list item
- * into one consistent shape so the UI never shows N/A unnecessarily.
- *
- * Raw API shape (from fetchProductById):
- *   { title, description, price, offer_price, image_inner, image_outer,
- *     upc_id, type, category_id: { category_name }, createdAt }
- *
- * Local/mapped shape (from fetchTrendingProducts / fetchActivityFeed):
- *   { id, title, description, price (string "$10"), discountPrice,
- *     originalPrice, totalDiscount, image: { uri: "..." } }
- */
 const normalizeProduct = (raw) => {
   if (!raw) return null;
 
-  // Detect local-mapped shape: has an `image` object and price is a string
   const isLocalShape = raw.image !== undefined && typeof raw.price === "string";
 
   if (isLocalShape) {
@@ -58,11 +45,9 @@ const normalizeProduct = (raw) => {
     let offerPrice = null;
 
     if (raw.discountPrice && raw.originalPrice) {
-      // Trending shape
       offerPrice = parsePrice(raw.discountPrice);
       originalPrice = parsePrice(raw.originalPrice);
     } else if (raw.price && raw.price.includes(" - ")) {
-      // Activity feed shape: "$10 - $8"
       const parts = raw.price.split(" - ");
       originalPrice = parsePrice(parts[0]);
       offerPrice = parsePrice(parts[1]);
@@ -74,8 +59,9 @@ const normalizeProduct = (raw) => {
       id: raw.id,
       title: raw.title || "Untitled Product",
       description: raw.description || "",
-      image_inner: raw.image?.uri || null,
-      image_outer: raw.image?.uri || null,
+      image_inner: raw.image?.uri || raw.image || null,
+      image_outer: raw.image?.uri || raw.image || null,
+      _originalImage: raw.image,
       price: originalPrice,
       offer_price: offerPrice,
       upc_id: null,
@@ -85,8 +71,23 @@ const normalizeProduct = (raw) => {
     };
   }
 
-  // Raw API shape — return as-is
-  return raw;
+  return {
+    ...raw,
+    image_inner:
+      raw.image_inner ||
+      raw.imageInner ||
+      raw.inner_image ||
+      raw.image?.uri ||
+      raw.image ||
+      null,
+    image_outer:
+      raw.image_outer ||
+      raw.imageOuter ||
+      raw.outer_image ||
+      raw.image?.uri ||
+      raw.image ||
+      null,
+  };
 };
 
 const SingleItemPage = ({ route }) => {
@@ -103,13 +104,31 @@ const SingleItemPage = ({ route }) => {
     const loadProduct = async () => {
       setIsLoading(true);
       try {
+        if (data && data.length > 0) {
+          const localFound = data.find((item) => item.id === productId);
+          if (localFound) {
+            setProduct(normalizeProduct(localFound));
+          }
+        }
+
         if (productId) {
           const result = await fetchProductById(productId, data || []);
-          setProduct(normalizeProduct(result));
+          if (result) {
+            const normalized = normalizeProduct(result);
+            if (!normalized.image_inner && !normalized.image_outer) {
+              const localFound = data?.find((item) => item.id === productId);
+              if (localFound) {
+                normalized.image_inner =
+                  localFound.image?.uri || localFound.image || null;
+                normalized.image_outer =
+                  localFound.image?.uri || localFound.image || null;
+              }
+            }
+            setProduct(normalized);
+          }
         }
       } catch (error) {
         console.error("Load product error:", error.message);
-        // Last resort: find directly from local data
         if (data && data.length > 0) {
           const found = data.find((item) => item.id === productId);
           if (found) setProduct(normalizeProduct(found));
@@ -130,21 +149,38 @@ const SingleItemPage = ({ route }) => {
   // ── Image helpers ─────────────────────────────────────
   const getImageSource = (value) => {
     if (!value) return PLACEHOLDER;
-    if (typeof value === "string") return { uri: value };
-    if (value.uri) return value;
+    if (typeof value === "string" && value.length > 0) return { uri: value };
+    if (value && typeof value === "object" && value.uri)
+      return { uri: value.uri };
+    if (typeof value === "number") return value;
     return PLACEHOLDER;
   };
 
   const innerImage = getImageSource(product?.image_inner);
   const outerImage = getImageSource(product?.image_outer);
-  const displayImage = activeImage === "inner" ? innerImage : outerImage;
+
+  const resolvedInner =
+    innerImage === PLACEHOLDER && product?._originalImage
+      ? getImageSource(product._originalImage)
+      : innerImage;
+  const resolvedOuter =
+    outerImage === PLACEHOLDER && product?._originalImage
+      ? getImageSource(product._originalImage)
+      : outerImage;
+
+  const displayImage = activeImage === "inner" ? resolvedInner : resolvedOuter;
 
   // ── Price helpers ─────────────────────────────────────
   const rawPrice = Number(product?.price);
   const rawOffer = Number(product?.offer_price);
-  const hasDiscount = product?.offer_price && rawOffer > 0 && rawOffer < rawPrice;
+  const hasDiscount =
+    product?.offer_price && rawOffer > 0 && rawOffer < rawPrice;
 
-  const displayOffer = hasDiscount ? `$${rawOffer}` : rawPrice ? `$${rawPrice}` : "";
+  const displayOffer = hasDiscount
+    ? `$${rawOffer}`
+    : rawPrice
+    ? `$${rawPrice}`
+    : "";
   const displayOriginal = hasDiscount ? `$${rawPrice}` : null;
   const discountPercent = hasDiscount
     ? `${Math.round(((rawPrice - rawOffer) / rawPrice) * 100)}% Off`
@@ -160,17 +196,45 @@ const SingleItemPage = ({ route }) => {
   const upcId = product?.upc_id || null;
 
   const typeLabel =
-    product?.type === 1 ? "Trending" :
-    product?.type === 2 ? "Activity Feed" : null;
+    product?.type === 1
+      ? "Trending"
+      : product?.type === 2
+      ? "Activity Feed"
+      : null;
 
   const createdDate = product?.createdAt
     ? new Date(product.createdAt).toLocaleString()
     : null;
 
-  const hasBothImages = product?.image_inner && product?.image_outer;
+  const hasBothImages =
+    product?.image_inner &&
+    product?.image_outer &&
+    product.image_inner !== product.image_outer;
+
+  // ── Share handler (defined AFTER all product-derived values) ──
+  const handleShare = async () => {
+    try {
+      const title = product?.title || "Check out this product";
+      const description = product?.description
+        ? `${product.description}\n\n`
+        : "";
+      const priceText = displayOffer
+        ? `Price: ${displayOffer}${
+            displayOriginal ? `  (was ${displayOriginal})` : ""
+          }`
+        : "";
+
+      await Share.share({
+        title,
+        message: `${title}\n\n${description}${priceText}`.trim(),
+      });
+    } catch (error) {
+      console.error("Share error:", error.message);
+    }
+  };
 
   // ── Loading ───────────────────────────────────────────
-  if (isLoading) {
+  if (isLoading && !product) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#130160" />
@@ -184,7 +248,9 @@ const SingleItemPage = ({ route }) => {
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingText}>Product not found.</Text>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={[styles.loadingText, { color: "#130160", marginTop: 10 }]}>
+          <Text
+            style={[styles.loadingText, { color: "#130160", marginTop: 10 }]}
+          >
             Go Back
           </Text>
         </TouchableOpacity>
@@ -205,12 +271,6 @@ const SingleItemPage = ({ route }) => {
           source={getImageSource(item.image)}
           style={styles.similarItemImage}
         />
-        <Ionicons
-          name="heart"
-          size={hp(3)}
-          color={"#EE2525"}
-          style={styles.heartIcon}
-        />
         <View style={styles.similarItemDescriptionContainer}>
           <Text style={styles.similarItemDescription} numberOfLines={2}>
             {item.description || item.title}
@@ -225,7 +285,8 @@ const SingleItemPage = ({ route }) => {
               <Text style={styles.similarItemOriginalPrice}>
                 {item.originalPrice}
               </Text>
-              {"  "}{item.totalDiscount}
+              {"  "}
+              {item.totalDiscount}
             </Text>
           )}
         </View>
@@ -246,37 +307,62 @@ const SingleItemPage = ({ route }) => {
         <View style={styles.header}>
           <View style={styles.headerChild}>
             <Pressable onPress={() => navigation.goBack()}>
-              <MaterialIcons name="arrow-back-ios" color={"#0D0D26"} size={25} />
+              <MaterialIcons
+                name="arrow-back-ios"
+                color={"#0D0D26"}
+                size={25}
+              />
             </Pressable>
             <Text style={styles.headerText}>Item</Text>
           </View>
-          <View style={styles.headerIcons}>
-            <Pressable><Heart_Icon height={hp(4)} /></Pressable>
-            <Pressable><Share_Icon height={hp(4)} /></Pressable>
-          </View>
+
+          {/* Only Share icon, no Heart */}
+          <Pressable onPress={handleShare} style={styles.shareButton}>
+            <Share_Icon height={hp(4)} />
+          </Pressable>
         </View>
 
         {/* Main image */}
         <View style={styles.mainImageContainer}>
-          <Image source={displayImage} style={styles.mainImage} resizeMode="cover" />
+          <Image
+            source={displayImage}
+            style={styles.mainImage}
+            resizeMode="cover"
+          />
         </View>
 
-        {/* Inner / Outer toggle — only if both image URLs exist */}
+        {/* Inner / Outer toggle — only if both image URLs are different */}
         {hasBothImages && (
           <View style={styles.imageToggleRow}>
             <TouchableOpacity
-              style={[styles.toggleBtn, activeImage === "inner" && styles.toggleBtnActive]}
+              style={[
+                styles.toggleBtn,
+                activeImage === "inner" && styles.toggleBtnActive,
+              ]}
               onPress={() => setActiveImage("inner")}
             >
-              <Text style={[styles.toggleBtnText, activeImage === "inner" && styles.toggleBtnTextActive]}>
+              <Text
+                style={[
+                  styles.toggleBtnText,
+                  activeImage === "inner" && styles.toggleBtnTextActive,
+                ]}
+              >
                 Inner
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.toggleBtn, activeImage === "outer" && styles.toggleBtnActive]}
+              style={[
+                styles.toggleBtn,
+                activeImage === "outer" && styles.toggleBtnActive,
+              ]}
               onPress={() => setActiveImage("outer")}
             >
-              <Text style={[styles.toggleBtnText, activeImage === "outer" && styles.toggleBtnTextActive]}>
+              <Text
+                style={[
+                  styles.toggleBtnText,
+                  activeImage === "outer" && styles.toggleBtnTextActive,
+                ]}
+              >
                 Outer
               </Text>
             </TouchableOpacity>
@@ -284,7 +370,6 @@ const SingleItemPage = ({ route }) => {
         )}
 
         <View style={styles.contentContainer}>
-
           {/* Price */}
           {displayOffer ? (
             <View style={styles.priceContainer}>
@@ -309,12 +394,12 @@ const SingleItemPage = ({ route }) => {
               </View>
             ) : null}
 
-            {/* Only render meta rows that have real values */}
             {(categoryName || upcId || typeLabel || createdDate) && (
               <View style={styles.itemMetaContainer}>
                 {categoryName && (
                   <Text style={styles.metaText}>
-                    Category: <Text style={styles.metaValue}>{categoryName}</Text>
+                    Category:{" "}
+                    <Text style={styles.metaValue}>{categoryName}</Text>
                   </Text>
                 )}
                 {upcId && (
@@ -348,7 +433,11 @@ const SingleItemPage = ({ route }) => {
             </TouchableOpacity>
             <TouchableOpacity style={styles.button}>
               <Text style={styles.buttonText}>Replace</Text>
-              <MaterialCommunityIcons name="file-replace" size={18} color="#000" />
+              <MaterialCommunityIcons
+                name="file-replace"
+                size={18}
+                color="#000"
+              />
             </TouchableOpacity>
             <TouchableOpacity style={styles.button}>
               <Text style={styles.buttonText}>Delete</Text>
@@ -425,11 +514,8 @@ const styles = StyleSheet.create({
     textAlign: "left",
     color: "#0D0140",
   },
-  headerIcons: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    width: "23%",
+  shareButton: {
+    padding: 4,
   },
   mainImageContainer: {
     width: "90%",
@@ -569,20 +655,20 @@ const styles = StyleSheet.create({
   },
   similarItemContainer: {
     width: wp(45),
-    height: hp(26),
+    height: hp(22),
     alignItems: "center",
     marginVertical: "1%",
   },
   similarItemCard: {
     width: wp(43),
-    height: hp(26),
+    height: hp(22),
     borderRadius: 5,
     borderWidth: 1,
     borderColor: "#e6e6e6",
     backgroundColor: "#fff",
   },
   similarItemImage: {
-    width: wp(43),
+    width: wp(42.5),
     height: hp(13),
     borderRadius: 5,
   },

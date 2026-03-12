@@ -20,7 +20,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useStripe } from "@stripe/stripe-react-native";
 import useStore from "../../store";
 
-const BASE_URL = "https://biniq.onrender.com/api";
+const BASE_URL = "http://10.94.245.75:3001/api";
 
 const PLANS = [
   {
@@ -82,7 +82,7 @@ const SubscriptionScreen = () => {
             name: user?.full_name || "",
             plan: plan.id,
           }),
-        }
+        },
       );
 
       const data = await response.json();
@@ -153,7 +153,7 @@ const SubscriptionScreen = () => {
             payment_intent_id: data.paymentIntentId,
             plan: plan.id,
           }),
-        }
+        },
       );
 
       const confirmData = await confirmResponse.json();
@@ -163,13 +163,13 @@ const SubscriptionScreen = () => {
         Alert.alert(
           "Subscribed! 🎉",
           `You are now on the ${plan.label} plan.\nYou can create up to ${plan.promotions} promotions.`,
-          [{ text: "Let's Go!", onPress: () => navigation.goBack() }]
+          [{ text: "Let's Go!", onPress: () => navigation.goBack() }],
         );
       } else {
         Alert.alert(
           "Warning",
           confirmData.message ||
-            "Payment received but subscription activation failed. Please contact support."
+            "Payment received but subscription activation failed. Please contact support.",
         );
       }
     } catch (error) {
@@ -262,7 +262,8 @@ const SubscriptionScreen = () => {
           <View style={styles.infoBox}>
             <MaterialIcons name="lock" size={18} color="#14BA9C" />
             <Text style={styles.infoText}>
-              Secure payment powered by Stripe. Your card details are never stored on our servers.
+              Secure payment powered by Stripe. Your card details are never
+              stored on our servers.
             </Text>
           </View>
           <Text style={styles.testHint}>
