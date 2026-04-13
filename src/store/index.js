@@ -3,8 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 
-// ✅ Production URL (from Doc 6)
-const BASE_URL = "http://10.94.245.75:3001/api";
+const BASE_URL = "https://biniq.onrender.com/api";
 
 const useStore = create(
   persist(
@@ -26,18 +25,14 @@ const useStore = create(
       // ─────────────────────────────────────────
 
       // ✅ POST /api/users/login
-      login: async ({ email, password }) => {
+      login: async ({ email, password, role }) => {
         try {
-          console.log("Login API call:", `${BASE_URL}/users/login`);
           const response = await axios.post(
             `${BASE_URL}/users/login`,
-            { email, password },
+            { email, password, role },
             { headers: { "Content-Type": "application/json" } },
           );
           const data = response.data;
-
-          console.log("=== FULL LOGIN RESPONSE ===", JSON.stringify(data));
-          console.log("=== KEYS ===", Object.keys(data));
 
           const token =
             data.token ||
@@ -49,27 +44,18 @@ const useStore = create(
           const user = data.user_details || data.user || data.data || data;
 
           if (!token) {
-            console.error("No token found in response:", Object.keys(data));
-            throw new Error(data.message || "Login failed");
+            throw new Error(data.message || "Login failed - no token received");
           }
-
-          console.log("✅ Token found:", token.substring(0, 20) + "...");
-          console.log("✅ User:", JSON.stringify(user));
 
           set({ user, accessToken: token });
           return data;
         } catch (error) {
-          console.error("Login error:", error.message);
-          if (error.response) {
-            console.error("Response data:", error.response.data);
-            console.error("Response status:", error.response.status);
-          }
-          throw new Error(
+          const message =
             error.response?.data?.message ||
-              error.response?.data?.detail ||
-              error.message ||
-              "Login failed",
-          );
+            error.response?.data?.error ||
+            error.message ||
+            "Login failed";
+          throw new Error(message);
         }
       },
 
@@ -161,8 +147,6 @@ const useStore = create(
       },
 
       // ✅ GET /api/users/profile
-      // IMPROVED (Doc 5): force-overrides critical fields so stale cache can never
-      // overwrite fresh verified/subscription_end_time/status from the API
       fetchUserProfile: async () => {
         try {
           const { accessToken } = useStore.getState();
@@ -185,7 +169,6 @@ const useStore = create(
 
           const freshUser = data.user || data.user_details || data;
 
-          // ✅ Force override critical fields — persist cache cannot overwrite these
           const currentUser = useStore.getState().user;
           const mergedUser = {
             ...currentUser,
@@ -205,7 +188,6 @@ const useStore = create(
             console.error("Response data:", error.response.data);
             console.error("Response status:", error.response.status);
           }
-          // Non-fatal — don't throw so screens still load
           return null;
         }
       },
@@ -229,7 +211,6 @@ const useStore = create(
             JSON.stringify(data),
           );
 
-          // Controller returns the array directly — save as-is
           const docs = Array.isArray(data) ? data : [];
           set({ subscription: docs });
           return docs;
@@ -263,13 +244,15 @@ const useStore = create(
               },
             },
           );
+
           const data = response.data;
-          console.log("Fetch product by ID response:", data);
+          console.log("Fetch product by ID response:", JSON.stringify(data));
           set({ product: data });
           return data;
         } catch (error) {
+          // 404 → fall back to local data silently (no WARN needed now — only hits
+          // if the product genuinely doesn't exist or belongs to another user)
           if (error.response?.status === 404 && localDataFallback.length > 0) {
-            console.warn("fetchProductById: 404 — falling back to local data.");
             const found = localDataFallback.find(
               (p) => (p.id || p._id) === productId,
             );
@@ -279,7 +262,8 @@ const useStore = create(
             }
           }
           console.error("Fetch product by ID error:", error.message);
-          throw error;
+          // Return null instead of throwing so the UI can handle it gracefully
+          return null;
         }
       },
 
@@ -349,13 +333,29 @@ const useStore = create(
           const data = response.data;
           const products =
             data.results || data.products || (Array.isArray(data) ? data : []);
+
           return products.map((item) => ({
+            // ── Keep both id forms so fetchProductById can match either ──
             id: item._id || item.id,
-            image: item.image_inner ? { uri: item.image_inner } : null,
+            _id: item._id || item.id,
+            // ── Raw fields passed through so SingleItemPage can normalise them ──
             title: item.title,
             description: item.description,
-            discountPrice: `$${item.offer_price || item.price}`,
-            originalPrice: `$${item.price}`,
+            image_inner: item.image_inner || null,
+            image_outer: item.image_outer || null,
+            price: item.price,
+            offer_price: item.offer_price || null,
+            upc_id: item.upc_id || null,
+            type: item.type,
+            category_id: item.category_id || null,
+            createdAt: item.createdAt || item.created_at || null,
+            likes: item.likes || 0,
+            // ── Legacy display fields for cards that still use them ──
+            image: item.image_inner ? { uri: item.image_inner } : null,
+            discountPrice: item.offer_price
+              ? `$${item.offer_price}`
+              : `$${item.price}`,
+            originalPrice: item.offer_price ? `$${item.price}` : null,
             totalDiscount: item.offer_price
               ? `${
                   100 - Math.round((item.offer_price / item.price) * 100)
@@ -413,23 +413,17 @@ const useStore = create(
           });
 
           const data = response.data;
-          console.log("=== RAW PROMOTIONS RESPONSE ===", JSON.stringify(data));
           const promotions =
             data.data ||
             data.results ||
             data.promotions ||
             (Array.isArray(data) ? data : []);
 
-          // ✅ Preserve all raw fields — no remapping that loses banner_image
-          // Screens read: item.banner_image, item.description, item.title,
-          //               item.price, item.status, item.start_date, item.end_date
           return promotions.map((item) => ({
-            ...item, // keep ALL raw fields
-            id: item._id || item.id, // normalise id
-            image: item.banner_image // convenience alias
-              ? { uri: item.banner_image }
-              : null,
-            shortDescription: item.description, // convenience alias
+            ...item,
+            id: item._id || item.id,
+            image: item.banner_image ? { uri: item.banner_image } : null,
+            shortDescription: item.description,
           }));
         } catch (error) {
           console.error("Fetch promotions error:", error.message);
@@ -544,7 +538,7 @@ const useStore = create(
       // ─────────────────────────────────────────
 
       // ✅ GET /api/stores/my-store
-      // IMPROVED (Doc 5): parallel fetch of store + stats, merged into one object
+      // ✅ FIXED: removed misplaced component-level hook calls that were inside this function
       fetchStoreDetails: async () => {
         try {
           const { accessToken } = useStore.getState();
@@ -577,7 +571,6 @@ const useStore = create(
 
           const storeData = storeRes.value.data;
 
-          // Merge weekly stats if the /stats endpoint exists, fall back gracefully
           const statsData =
             statsRes.status === "fulfilled" ? statsRes.value.data : {};
 
@@ -666,7 +659,7 @@ const useStore = create(
             },
           });
           const data = response.data;
-          console.log("Fetch notifications response:", data);
+          console.log("=== NOTIFICATIONS RAW ===", JSON.stringify(data));
           set({ notifications: data });
           return data;
         } catch (error) {
@@ -681,6 +674,8 @@ const useStore = create(
           const { accessToken } = useStore.getState();
           if (!accessToken) throw new Error("Access token missing");
 
+          console.log("=== MARKING READ, ID ===", notificationId); // ADD
+
           const response = await axios.put(
             `${BASE_URL}/notifications/${notificationId}/read`,
             {},
@@ -691,10 +686,19 @@ const useStore = create(
               },
             },
           );
-          console.log("Mark notification read response:", response.data);
+
+          console.log(
+            "=== MARK READ RESPONSE ===",
+            JSON.stringify(response.data),
+          ); // ADD
           return response.data;
         } catch (error) {
           console.error("Mark notification read error:", error.message);
+          console.error("=== MARK READ STATUS ===", error.response?.status); // ADD
+          console.error(
+            "=== MARK READ BODY ===",
+            JSON.stringify(error.response?.data),
+          ); // ADD
           throw error;
         }
       },
@@ -778,9 +782,8 @@ const useStore = create(
     {
       name: "app-storage",
       storage: createJSONStorage(() => AsyncStorage),
-      // ✅ KEY FIX (Doc 5): Only persist token + firstOpen.
-      // user and store are EXCLUDED — they always come fresh from the API.
-      // This prevents stale verified:false from cache overwriting fresh verified:true.
+      // Only persist token + firstOpen.
+      // user and store excluded — always come fresh from API.
       partialize: (state) => ({
         isFirstOpen: state.isFirstOpen,
         accessToken: state.accessToken,

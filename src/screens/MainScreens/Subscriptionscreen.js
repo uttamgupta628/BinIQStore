@@ -20,7 +20,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useStripe } from "@stripe/stripe-react-native";
 import useStore from "../../store";
 
-const BASE_URL = "http://10.94.245.75:3001/api";
+const BASE_URL = "https://biniq.onrender.com/api";
 
 const PLANS = [
   {

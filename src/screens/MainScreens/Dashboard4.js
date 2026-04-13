@@ -74,7 +74,7 @@ const Dashboard4 = () => {
     : 0;
 
   const billingLabel = sub?.billing_cycle === 'monthly' ? 'Monthly' : 'Yearly';
-  const amountLabel  = sub?.amount ? `$${(sub.amount / 100).toLocaleString()}` : '$1,997';
+  const amountLabel  = sub?.amount ? `$${(sub.amount / 1).toLocaleString()}` : '$1,997';
   const orderLabel   = sub?.order_id || '—';
 
   return (
@@ -158,7 +158,7 @@ const Dashboard4 = () => {
               </View>
 
               <View style={styles.gridItem}>
-                <Text style={styles.gridLabel}>Expiry Date</Text>
+                <Text style={styles.gridLabel}>Renewal Date</Text>
                 <Text style={styles.gridValue}>{expiryStr || '—'}</Text>
               </View>
 
@@ -215,7 +215,7 @@ const Dashboard4 = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {flex: 1, paddingVertical: 16},
+  container: {flex: 1, paddingVertical: 0},
   header:    {marginBottom: 12},
   greeting:  {fontSize: hp(2.4), fontFamily: 'Nunito-Bold', color: '#000'},
   name:      {color: '#000', fontFamily: 'Nunito-Bold', textDecorationLine: 'underline'},

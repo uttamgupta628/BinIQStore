@@ -5,52 +5,59 @@ import {
   StyleSheet,
   Text,
   View,
-  Image,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import React, { useState, useEffect } from "react";
 import {
   heightPercentageToDP as hp,
   widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
-import FontAwesome6 from "react-native-vector-icons/FontAwesome6";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import { TouchableOpacity } from "react-native-gesture-handler";
 import { useNavigation } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 
-const FAQs = () => {
+const BASE_URL = "https://biniq.onrender.com/api";
+
+const Notifications = () => {
   const navigation = useNavigation();
   const [notifications, setNotifications] = useState({
     todays: [],
     yesterdays: [],
     olders: [],
   });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
-        const response = await fetch(
-          "https://binq.paywin24.com/api/notifiation"
-        );
+        const response = await fetch(`${BASE_URL}/notification`);
         const data = await response.json();
         if (data.success) {
-          setNotifications(data);
+          setNotifications({
+            todays: data.todays || [],
+            yesterdays: data.yesterdays || [],
+            olders: data.olders || [],
+          });
         } else {
           Alert.alert("Error", "Failed to fetch notifications");
         }
       } catch (error) {
         console.error("Notification fetch error:", error);
         Alert.alert("Error", "Network issue or server error");
+      } finally {
+        setLoading(false);
       }
     };
     fetchNotifications();
   }, []);
 
+  // Fix: delete works across ALL sections, not just olders
   const deleteNotification = (id) => {
     Alert.alert(
-      "Confirm Delete",
+      "Delete Notification",
       "Are you sure you want to delete this notification?",
       [
         { text: "Cancel", style: "cancel" },
@@ -59,7 +66,8 @@ const FAQs = () => {
           style: "destructive",
           onPress: () => {
             setNotifications((prev) => ({
-              ...prev,
+              todays: prev.todays.filter((item) => item.id !== id),
+              yesterdays: prev.yesterdays.filter((item) => item.id !== id),
               olders: prev.olders.filter((item) => item.id !== id),
             }));
           },
@@ -68,111 +76,142 @@ const FAQs = () => {
     );
   };
 
-  const NotificationItem = ({ id, title, time, description, onDelete }) => (
+  const hasNoNotifications =
+    notifications.todays.length === 0 &&
+    notifications.yesterdays.length === 0 &&
+    notifications.olders.length === 0;
+
+  const NotificationItem = ({ id, title, time, description }) => (
     <View style={styles.notificationItem}>
       <View style={styles.iconContainer}>
-        <Ionicons name="document-text-outline" size={24} color="#14BA9C" />
+        <Ionicons name="notifications-outline" size={22} color="#130160" />
       </View>
       <View style={styles.notificationContent}>
-        <Text style={styles.notificationTitle}>{title || "Notification"}</Text>
-        <Text style={styles.notificationDescription}>
-          {description || "No description available"}
+        <Text style={styles.notificationTitle} numberOfLines={2}>
+          {title || "Notification"}
         </Text>
-        <View style={styles.deleteButton}>
-          <Text style={styles.notificationTime}>{time || "Unknown time"}</Text>
-          <TouchableOpacity onPress={() => onDelete(id)}>
-            <Text style={styles.deleteText}>Delete</Text>
+        {!!description && (
+          <Text style={styles.notificationDescription} numberOfLines={2}>
+            {description}
+          </Text>
+        )}
+        <View style={styles.notificationFooter}>
+          <View style={styles.timeRow}>
+            <Ionicons name="time-outline" size={13} color="#8E8E93" />
+            <Text style={styles.notificationTime}> {time || "Just now"}</Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => deleteNotification(id)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <View style={styles.deleteBtn}>
+              <Ionicons name="trash-outline" size={13} color="#FF3B30" />
+              <Text style={styles.deleteText}> Delete</Text>
+            </View>
           </TouchableOpacity>
         </View>
       </View>
     </View>
   );
 
+  const Section = ({ title, data }) => {
+    if (!data || data.length === 0) return null;
+    return (
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionDot} />
+          <Text style={styles.sectionTitle}>{title}</Text>
+        </View>
+        {data.map((item) => (
+          <NotificationItem
+            key={item.id}
+            id={item.id}
+            title={item.message}
+            time={item.time_ago}
+            description={item.description || ""}
+          />
+        ))}
+      </View>
+    );
+  };
+
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ flexGrow: 1 }}
+      showsVerticalScrollIndicator={false}>
       <StatusBar translucent={true} backgroundColor={"transparent"} />
       <ImageBackground
         source={require("../../../assets/vector_1.png")}
         style={styles.vector}
-        resizeMode="stretch"
-      >
+        resizeMode="stretch">
+
+        {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerChild}>
-            <Pressable onPress={() => navigation.goBack()}>
-              <MaterialIcons
-                name="arrow-back-ios"
-                color={"#0D0D26"}
-                size={25}
-              />
+            <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+              <MaterialIcons name="arrow-back-ios" color={"#0D0D26"} size={22} />
             </Pressable>
-            <Text style={styles.headerText}>Notification</Text>
+            <Text style={styles.headerText}>Notifications</Text>
           </View>
+          {!loading && !hasNoNotifications && (
+            <TouchableOpacity
+              onPress={() =>
+                Alert.alert("Clear All", "Delete all notifications?", [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Clear All",
+                    style: "destructive",
+                    onPress: () =>
+                      setNotifications({ todays: [], yesterdays: [], olders: [] }),
+                  },
+                ])
+              }>
+              <Text style={styles.clearAll}>Clear All</Text>
+            </TouchableOpacity>
+          )}
         </View>
-        <View style={{ marginVertical: "2%" }}>
-          {notifications.todays.length > 0 && (
-            <View>
-              <Text style={styles.sectionTitle}>Today's Notifications</Text>
-              {notifications.todays.map((notification) => (
-                <NotificationItem
-                  key={notification.id}
-                  id={notification.id}
-                  title={notification.message}
-                  time={notification.time_ago}
-                  description=""
-                  onDelete={deleteNotification}
-                />
-              ))}
+
+        {/* Body */}
+        <View style={styles.body}>
+          {loading ? (
+            <View style={styles.centered}>
+              <ActivityIndicator size="large" color="#130160" />
+              <Text style={styles.loadingText}>Loading notifications...</Text>
             </View>
-          )}
-          {notifications.yesterdays.length > 0 && (
-            <View>
-              <Text style={styles.sectionTitle}>Yesterday's Notifications</Text>
-              {notifications.yesterdays.map((notification) => (
-                <NotificationItem
-                  key={notification.id}
-                  id={notification.id}
-                  title={notification.message}
-                  time={notification.time_ago}
-                  description=""
-                  onDelete={deleteNotification}
-                />
-              ))}
-            </View>
-          )}
-          {notifications.olders.length > 0 && (
-            <View>
-              <Text style={styles.sectionTitle}>Older Notifications</Text>
-              {notifications.olders.map((notification) => (
-                <NotificationItem
-                  key={notification.id}
-                  id={notification.id}
-                  title={notification.message}
-                  time={notification.time_ago}
-                  description=""
-                  onDelete={deleteNotification}
-                />
-              ))}
-            </View>
-          )}
-          {notifications.todays.length === 0 &&
-            notifications.yesterdays.length === 0 &&
-            notifications.olders.length === 0 && (
-              <Text style={styles.noNotifications}>
-                No notifications available
+          ) : hasNoNotifications ? (
+            <View style={styles.centered}>
+              <Ionicons name="notifications-off-outline" size={64} color="#ccc" />
+              <Text style={styles.noNotifications}>No notifications yet</Text>
+              <Text style={styles.noNotificationsSub}>
+                You're all caught up! Check back later.
               </Text>
-            )}
+            </View>
+          ) : (
+            <>
+              <Section title="Today" data={notifications.todays} />
+              <Section title="Yesterday" data={notifications.yesterdays} />
+              <Section title="Older" data={notifications.olders} />
+            </>
+          )}
         </View>
+
+        <View style={{ height: hp(5) }} />
       </ImageBackground>
     </ScrollView>
   );
 };
 
-export default FAQs;
+export default Notifications;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#E6F3F5",
+  },
+  vector: {
+    flex: 1,
+    width: wp(100),
+    minHeight: hp(100),
   },
   header: {
     width: wp(100),
@@ -186,252 +225,132 @@ const styles = StyleSheet.create({
   headerChild: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+  },
+  backBtn: {
+    marginRight: 6,
   },
   headerText: {
     fontFamily: "Nunito-Bold",
     fontSize: hp(3),
-    textAlign: "left",
     color: "#0D0140",
   },
-  sectionTitle: {
+  clearAll: {
+    fontFamily: "Nunito-SemiBold",
+    fontSize: hp(1.8),
+    color: "#FF3B30",
+  },
+  body: {
+    marginTop: hp(2),
+    minHeight: hp(60),
+  },
+  centered: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: hp(12),
+  },
+  loadingText: {
+    fontFamily: "Nunito-Regular",
+    fontSize: hp(1.9),
+    color: "#8E8E93",
+    marginTop: hp(1.5),
+  },
+  noNotifications: {
     fontFamily: "Nunito-Bold",
     fontSize: hp(2.3),
     color: "#0D0140",
-    marginLeft: wp(5),
-    marginVertical: hp(1),
+    marginTop: hp(2),
   },
-  noNotifications: {
+  noNotificationsSub: {
     fontFamily: "Nunito-Regular",
-    fontSize: hp(2),
+    fontSize: hp(1.8),
     color: "#8E8E93",
+    marginTop: hp(0.5),
     textAlign: "center",
-    marginVertical: hp(2),
+    paddingHorizontal: wp(10),
+  },
+  section: {
+    marginBottom: hp(1),
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: wp(5),
+    marginBottom: hp(0.5),
+    marginTop: hp(1),
+  },
+  sectionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#130160",
+    marginRight: 8,
+  },
+  sectionTitle: {
+    fontFamily: "Nunito-Bold",
+    fontSize: hp(2.1),
+    color: "#0D0140",
   },
   notificationItem: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     backgroundColor: "#FFFFFF",
     marginHorizontal: wp(5),
-    marginVertical: hp(1),
-    borderRadius: 10,
-    padding: "4%",
+    marginVertical: hp(0.6),
+    borderRadius: 14,
+    padding: wp(4),
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 4,
+    elevation: 3,
   },
   iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#E5E5EA",
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#EEF0FF",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
+    marginTop: 2,
   },
   notificationContent: {
     flex: 1,
   },
   notificationTitle: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#000000",
+    fontFamily: "Nunito-SemiBold",
+    fontSize: hp(1.9),
+    color: "#0D0D26",
     marginBottom: 4,
   },
-  notificationTime: {
-    fontSize: 14,
-    color: "#8E8E93",
-  },
   notificationDescription: {
-    fontSize: 14,
+    fontFamily: "Nunito-Regular",
+    fontSize: hp(1.7),
     color: "#8E8E93",
+    marginBottom: 6,
   },
-  deleteButton: {
-    paddingHorizontal: wp(1),
-    paddingVertical: hp(1),
+  notificationFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginTop: 4,
+  },
+  timeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  notificationTime: {
+    fontFamily: "Nunito-Regular",
+    fontSize: hp(1.5),
+    color: "#8E8E93",
+  },
+  deleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   deleteText: {
-    fontSize: 14,
+    fontFamily: "Nunito-SemiBold",
+    fontSize: hp(1.6),
     color: "#FF3B30",
   },
 });
-// import { ImageBackground, Pressable, StatusBar, StyleSheet, Text, View, Image, ScrollView } from 'react-native'
-// import React from 'react'
-// import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
-// import FontAwesome6 from 'react-native-vector-icons/FontAwesome6';
-// import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-// import { TouchableOpacity } from 'react-native-gesture-handler';
-// import { useNavigation } from '@react-navigation/native';
-// import Ionicons from 'react-native-vector-icons/Ionicons';
-
-// const FAQs = () => {
-//     const navigation = useNavigation();
-//     const notifications = [
-//         { id: 1, title: 'Notification 1', description: 'Lorem Ipsum is simply dummy text of the printing and typesetting industry', time: '20 minutes ago' },
-//     ];
-//     const NotificationItem = ({ title, time, description }) => (
-//         <View style={styles.notificationItem}>
-//             <View style={styles.iconContainer}>
-//                 <Ionicons name="document-text-outline" size={24} color="#14BA9C" />
-//             </View>
-//             <View style={styles.notificationContent}>
-//                 <Text style={styles.notificationTitle}>{title}</Text>
-//                 <Text style={styles.notificationDescription}>{description}</Text>
-//                 <View style={styles.deleteButton}>
-//             <Text style={styles.notificationTime}>{time}</Text>
-//                 <Text style={styles.deleteText}>Delete</Text>
-//             </View>
-//             </View>
-//         </View>
-//     );
-//     return (
-//         <ScrollView style={styles.container}>
-//             <StatusBar translucent={true} backgroundColor={'transparent'} />
-//             <ImageBackground
-//                 source={require('../../../assets/vector_1.png')}
-//                 style={styles.vector}
-//                 resizeMode="stretch"
-//             >
-//                 <View style={styles.header}>
-//                     <View style={styles.headerChild}>
-//                         <Pressable onPress={() => navigation.goBack()}>
-//                             <MaterialIcons name='arrow-back-ios' color={'#0D0D26'} size={25} />
-//                         </Pressable>
-//                         <Text style={styles.headerText}>Notification</Text>
-//                     </View>
-//                 </View>
-//                 <View style={{marginVertical: '2%'}}>
-//                 {notifications.map((notification) => (
-//                     <NotificationItem key={notification.id} title={notification.title} time={notification.time} description={notification.description} />
-//                 ))}
-//                 </View>
-//             </ImageBackground>
-//         </ScrollView>
-//     )
-// }
-
-// export default FAQs
-
-// const styles = StyleSheet.create({
-//     container: {
-//         flex: 1,
-//         backgroundColor: '#E6F3F5',
-//     },
-//     header: {
-//         width: wp(100),
-//         height: hp(7),
-//         marginTop: '10%',
-//         paddingHorizontal: '5%',
-//         flexDirection: 'row',
-//         alignItems: 'center',
-//         justifyContent: 'space-between',
-//     },
-//     headerChild: {
-//         flexDirection: 'row',
-//         alignItems: 'center',
-//         justifyContent: 'space-between'
-//     },
-//     headerText: {
-//         fontFamily: 'Nunito-Bold',
-//         fontSize: hp(3),
-//         textAlign: 'left',
-//         color: '#0D0140'
-//     },
-//     searchParent: {
-//         flexDirection: 'row',
-//         alignItems: 'center',
-//         marginHorizontal: '3%',
-//         marginVertical: '3%',
-//     },
-//     searchContainer: {
-//         flex: 1,
-//         flexDirection: 'row',
-//         alignItems: 'center',
-//         // backgroundColor: 'trasparent',
-//         borderWidth: 1,
-//         borderRadius: 12,
-//         marginRight: 10,
-//         borderColor: '#99ABC678',
-//         height: hp(6),
-//     },
-//     cameraButton: {
-//         padding: 10,
-//     },
-//     input: {
-//         flex: 1,
-//         fontSize: hp(2.2),
-//         fontFamily: 'Nunito-Regular',
-//         paddingVertical: 8,
-//         color: '#999'
-//     },
-//     searchButton: {
-//         padding: 10,
-//     },
-//     menuButton: {
-//         backgroundColor: '#130160',
-//         padding: 10,
-//         borderRadius: 12,
-//         height: hp(6),
-//         width: wp(14),
-//         justifyContent: 'center',
-//         alignItems: 'center'
-//     },
-//     notificationList: {
-//         flex: 1,
-//     },
-//     notificationItem: {
-//         flexDirection: 'row',
-//         alignItems: 'center',
-//         backgroundColor: '#FFFFFF',
-//         marginHorizontal: wp(5),
-//         marginVertical: hp(1),
-//         borderRadius: 10,
-//         padding: '4%',
-//         shadowColor: '#000',
-//         shadowOffset: { width: 0, height: 1 },
-//         shadowOpacity: 0.1,
-//         shadowRadius: 2,
-//         elevation: 2,
-//     },
-//     iconContainer: {
-//         width: 40,
-//         height: 40,
-//         borderRadius: 20,
-//         backgroundColor: '#E5E5EA',
-//         justifyContent: 'center',
-//         alignItems: 'center',
-//         marginRight: 12,
-//     },
-//     notificationContent: {
-//         flex: 1,
-//     },
-//     notificationTitle: {
-//         fontSize: 16,
-//         fontWeight: '500',
-//         color: '#000000',
-//         marginBottom: 4,
-//     },
-//     notificationTime: {
-//         fontSize: 14,
-//         color: '#8E8E93',
-//     },
-//     notificationDescription: {
-//         fontSize: 14,
-//         color: '#8E8E93',
-//     },
-//     deleteButton: {
-//         paddingHorizontal: wp(1),
-//         paddingVertical: hp(1),
-//         flexDirection: 'row',
-//         justifyContent: 'space-between'
-//     },
-//     deleteText: {
-//         fontSize: 14,
-//         color: '#FF3B30',
-//     },
-// })

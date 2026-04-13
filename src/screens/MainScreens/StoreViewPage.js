@@ -11,12 +11,13 @@ import {
   View,
   ActivityIndicator,
   Linking,
+  FlatList,
 } from "react-native";
 import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from "react-native-responsive-screen";
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import LocationIcon from "../../../assets/LocationIcon.svg";
@@ -31,6 +32,8 @@ import useStore from "../../store";
 
 const { width } = Dimensions.get("window");
 const PLACEHOLDER = require("../../../assets/slider_1.png");
+const CAROUSEL_WIDTH = width;
+const CAROUSEL_HEIGHT = hp(30);
 
 // ── Image resolver ────────────────────────────────────────────────────────────
 const getImageSource = (value) => {
@@ -67,6 +70,138 @@ const normalisePromotion = (item) => ({
   upc_id: item.upc_id || null,
 });
 
+// ── Store Images Carousel ─────────────────────────────────────────────────────
+const StoreImageCarousel = ({ images }) => {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const flatListRef = useRef(null);
+
+  if (!images || images.length === 0) return null;
+
+  const onScroll = (e) => {
+    const index = Math.round(e.nativeEvent.contentOffset.x / CAROUSEL_WIDTH);
+    setActiveIndex(index);
+  };
+
+  return (
+    <View style={carouselStyles.wrapper}>
+      {/* Slides */}
+      <FlatList
+        ref={flatListRef}
+        data={images}
+        keyExtractor={(_, i) => `carousel-${i}`}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        renderItem={({ item }) => (
+          <View style={carouselStyles.slide}>
+            <Image
+              source={{ uri: item }}
+              style={carouselStyles.image}
+              resizeMode="cover"
+            />
+            {/* Gradient overlay at bottom */}
+            <View style={carouselStyles.overlay} />
+          </View>
+        )}
+      />
+
+      {/* Dot indicators */}
+      {images.length > 1 && (
+        <View style={carouselStyles.dotsRow}>
+          {images.map((_, i) => (
+            <TouchableOpacity
+              key={i}
+              onPress={() => {
+                flatListRef.current?.scrollToIndex({ index: i, animated: true });
+                setActiveIndex(i);
+              }}
+              style={[
+                carouselStyles.dot,
+                i === activeIndex && carouselStyles.dotActive,
+              ]}
+            />
+          ))}
+        </View>
+      )}
+
+      {/* Counter badge */}
+      <View style={carouselStyles.counter}>
+        <MaterialIcons name="photo-library" size={12} color="#fff" />
+        <Text style={carouselStyles.counterText}>
+          {activeIndex + 1} / {images.length}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+const carouselStyles = StyleSheet.create({
+  wrapper: {
+    width: "100%",
+    height: CAROUSEL_HEIGHT,
+    backgroundColor: "#0a0a1a",
+  },
+  slide: {
+    width: CAROUSEL_WIDTH,
+    height: CAROUSEL_HEIGHT,
+    position: "relative",
+  },
+  image: {
+    width: "100%",
+    height: "100%",
+  },
+  overlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: hp(8),
+    backgroundColor: "transparent",
+    // Simulates a gradient fade — use expo-linear-gradient if available
+  },
+  dotsRow: {
+    position: "absolute",
+    bottom: hp(1.8),
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.4)",
+  },
+  dotActive: {
+    width: 22,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#fff",
+  },
+  counter: {
+    position: "absolute",
+    top: hp(1.5),
+    right: wp(3.5),
+    backgroundColor: "rgba(0,0,0,0.55)",
+    paddingHorizontal: wp(2.5),
+    paddingVertical: 4,
+    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  counterText: {
+    color: "#fff",
+    fontSize: hp(1.4),
+    fontFamily: "Nunito-SemiBold",
+  },
+});
+
+// ── Main Component ────────────────────────────────────────────────────────────
 const StoreViewPage = () => {
   const navigation = useNavigation();
   const { fetchStoreDetails, fetchTrendingProducts, fetchPromotions, user } =
@@ -77,7 +212,7 @@ const StoreViewPage = () => {
   const [promotions, setPromotions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ── Verification logic — same as Dashboard2 ───────────────────────────────
+  // ── Verification logic ────────────────────────────────────────────────────
   const isVerified =
     store?.verified === true ||
     user?.verified === true ||
@@ -94,7 +229,7 @@ const StoreViewPage = () => {
     : null;
   const isExpired = daysLeft !== null && daysLeft < 0;
 
-  // ── Refresh on screen focus ───────────────────────────────────────────────
+  // ── Refresh on focus ──────────────────────────────────────────────────────
   useFocusEffect(
     useCallback(() => {
       const fetchData = async () => {
@@ -125,7 +260,7 @@ const StoreViewPage = () => {
     return `${n}`;
   };
 
-  // ── Social icon helper — tappable if URL exists ───────────────────────────
+  // ── Social icon helper ────────────────────────────────────────────────────
   const SocialIcon = ({ url, children }) => {
     if (url) {
       const fullUrl = url.startsWith("http") ? url : `https://${url}`;
@@ -133,13 +268,14 @@ const StoreViewPage = () => {
         <TouchableOpacity
           onPress={() => Linking.openURL(fullUrl).catch(() => {})}
           activeOpacity={0.7}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={styles.socialIconBtn}
         >
           {children}
         </TouchableOpacity>
       );
     }
-    return <View style={{ opacity: 0.35 }}>{children}</View>;
+    return <View style={[styles.socialIconBtn, { opacity: 0.3 }]}>{children}</View>;
   };
 
   // ── Trending card ─────────────────────────────────────────────────────────
@@ -207,6 +343,12 @@ const StoreViewPage = () => {
               style={styles.promotionImage}
               resizeMode="cover"
             />
+            {/* Status badge over image */}
+            <View style={styles.promotionBadge}>
+              <Text style={styles.promotionBadgeText}>
+                {item.status || "Active"}
+              </Text>
+            </View>
           </View>
           <View style={styles.promotionContent}>
             <Text
@@ -223,25 +365,16 @@ const StoreViewPage = () => {
             >
               {item.shortDescription || item.description}
             </Text>
-            <Text style={styles.promotionStatus}>
-              {item.status || "Active"}
-            </Text>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                marginTop: 2,
-              }}
-            >
+            <View style={styles.promotionDateRow}>
               <GiftIcon width={12} height={12} />
-              <Text style={[styles.promotionDate, { marginLeft: 4 }]}>
+              <Text style={styles.promotionDate}>
                 {item.start_date
                   ? new Date(item.start_date).toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
                     })
                   : ""}
-                {" to "}
+                {" – "}
                 {item.end_date
                   ? new Date(item.end_date).toLocaleDateString("en-US", {
                       month: "short",
@@ -270,9 +403,7 @@ const StoreViewPage = () => {
     return (
       <View style={styles.loadingContainer}>
         <MaterialIcons name="store" size={64} color="#ccc" />
-        <Text
-          style={[styles.loadingText, { textAlign: "center", marginTop: 12 }]}
-        >
+        <Text style={[styles.loadingText, { textAlign: "center", marginTop: 12 }]}>
           {"Store not found.\nGo to Edit Profile to set up your store."}
         </Text>
         <TouchableOpacity
@@ -284,6 +415,12 @@ const StoreViewPage = () => {
       </View>
     );
   }
+
+  // Normalise store_images — filter out empty/null values
+  const storeImages =
+    Array.isArray(store?.store_images)
+      ? store.store_images.filter((img) => typeof img === "string" && img.trim())
+      : [];
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -324,7 +461,6 @@ const StoreViewPage = () => {
               <Text style={styles.storeNameText} numberOfLines={1}>
                 {store?.store_name || "Store"}
               </Text>
-              {/* Blue tick — only when verified and not expired */}
               {isVerified && !isExpired && <BoldTick width={20} />}
             </View>
 
@@ -372,7 +508,7 @@ const StoreViewPage = () => {
           <Text style={styles.actionBtnText}>Edit Profile</Text>
         </TouchableOpacity>
 
-        {/* Verify button — mirrors Dashboard2 logic exactly */}
+        {/* Verify button */}
         <TouchableOpacity
           style={[
             styles.verifyBtn,
@@ -451,11 +587,42 @@ const StoreViewPage = () => {
         </View>
       </View>
 
+      {/* ── Divider ───────────────────────────────────────────────────────── */}
+      <View style={styles.divider} />
+
+      {/* ── Store Gallery (MOVED HERE — before Trending Products) ─────────── */}
+      {storeImages.length > 0 && (
+        <View style={styles.gallerySection}>
+          {/* Gallery header */}
+          <View style={styles.gallerySectionHeader}>
+            <View style={styles.galleryTitleRow}>
+              <View style={styles.galleryIconBadge}>
+                <MaterialIcons name="photo-library" size={16} color="#fff" />
+              </View>
+              <Text style={styles.gallerySectionTitle}>Store Gallery</Text>
+            </View>
+            <View style={styles.galleryCountBadge}>
+              <Text style={styles.galleryCountText}>
+                {storeImages.length} Photo{storeImages.length !== 1 ? "s" : ""}
+              </Text>
+            </View>
+          </View>
+
+          {/* Carousel */}
+          <View style={styles.galleryCarouselWrapper}>
+            <StoreImageCarousel images={storeImages} />
+          </View>
+        </View>
+      )}
+
       {/* ── Trending Products ─────────────────────────────────────────────── */}
       {trendingProducts.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Trending Products</Text>
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.sectionAccentBar, { backgroundColor: "#130160" }]} />
+              <Text style={styles.sectionTitle}>Trending Products</Text>
+            </View>
             <TouchableOpacity
               onPress={() =>
                 navigation.navigate("AllProductsScreen", {
@@ -471,6 +638,7 @@ const StoreViewPage = () => {
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.flatListPad}
+            contentContainerStyle={{ paddingRight: wp(3) }}
           >
             {trendingProducts.slice(0, 7).map((item, i) => (
               <React.Fragment key={item.id?.toString() || `t-${i}`}>
@@ -485,12 +653,16 @@ const StoreViewPage = () => {
       {promotions.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>PROMOTIONS</Text>
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.sectionAccentBar, { backgroundColor: "#14BA9C" }]} />
+              <Text style={styles.sectionTitle}>Promotions</Text>
+            </View>
           </View>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.flatListPad}
+            contentContainerStyle={{ paddingRight: wp(3) }}
           >
             {promotions.slice(0, 7).map((item, i) => (
               <React.Fragment key={item.id?.toString() || `p-${i}`}>
@@ -509,7 +681,7 @@ const StoreViewPage = () => {
 export default StoreViewPage;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+  container: { flex: 1, backgroundColor: "#F7F8FC" },
   loadingContainer: {
     flex: 1,
     minHeight: hp(100),
@@ -540,9 +712,10 @@ const styles = StyleSheet.create({
   imgBg: {
     width: "100%",
     minHeight: hp(41),
-    borderBottomEndRadius: 20,
-    borderBottomLeftRadius: 20,
+    borderBottomEndRadius: 24,
+    borderBottomLeftRadius: 24,
     backgroundColor: "#130160",
+    overflow: "hidden",
   },
   header: {
     width: wp(100),
@@ -573,7 +746,7 @@ const styles = StyleSheet.create({
   storeImage: {
     width: "95%",
     height: hp(18),
-    borderRadius: 12,
+    borderRadius: 14,
     resizeMode: "cover",
   },
   profileStats: {
@@ -612,7 +785,7 @@ const styles = StyleSheet.create({
   // ── Action buttons ───────────────────────────────────────────────────────
   actionRow: {
     width: "90%",
-    marginTop: "5%",
+    marginTop: hp(2.5),
     height: hp(7),
     alignSelf: "center",
     flexDirection: "row",
@@ -621,27 +794,39 @@ const styles = StyleSheet.create({
   },
   editProfileBtn: {
     width: "48%",
-    borderWidth: 0.8,
+    borderWidth: 1,
     borderColor: "#130160",
     height: "90%",
-    borderRadius: 7,
+    borderRadius: 10,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 8,
     paddingHorizontal: "5%",
+    backgroundColor: "#fff",
+    shadowColor: "#130160",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   verifyBtn: {
     width: "48%",
-    borderWidth: 0.8,
+    borderWidth: 1,
     borderColor: "#130160",
     height: "90%",
-    borderRadius: 7,
+    borderRadius: 10,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 8,
     paddingHorizontal: "5%",
+    backgroundColor: "#fff",
+    shadowColor: "#130160",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   verifiedBtn: {
     borderColor: "#00B813",
@@ -661,87 +846,192 @@ const styles = StyleSheet.create({
   contentHeader: {
     width: "90%",
     marginHorizontal: "5%",
-    marginTop: "5%",
+    marginTop: hp(2.5),
   },
-  storeName: { fontFamily: "Nunito-Bold", color: "#000", fontSize: hp(2.4) },
-  contentDetails: { width: "90%", marginHorizontal: "5%", marginTop: "3%" },
+  storeName: {
+    fontFamily: "Nunito-Bold",
+    color: "#0a0a2e",
+    fontSize: hp(2.4),
+    letterSpacing: 0.8,
+  },
+  contentDetails: {
+    width: "90%",
+    marginHorizontal: "5%",
+    marginTop: "2%",
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: wp(4),
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
   detailText: {
-    color: "#000",
+    color: "#333",
     fontFamily: "Nunito-SemiBold",
     fontSize: hp(1.8),
-    marginVertical: "1.5%",
+    marginVertical: hp(0.8),
   },
   socialRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginVertical: "1%",
+    marginTop: hp(0.5),
   },
-  socialMediaIcons: { flexDirection: "row", gap: 10 },
+  socialMediaIcons: { flexDirection: "row", gap: 8, alignItems: "center" },
+  socialIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#F0F0F8",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  // ── Divider ───────────────────────────────────────────────────────────────
+  divider: {
+    width: "90%",
+    alignSelf: "center",
+    height: 1,
+    backgroundColor: "#E8E8F0",
+    marginTop: hp(2.5),
+  },
+
+  // ── Gallery Section ───────────────────────────────────────────────────────
+  gallerySection: {
+    width: "90%",
+    alignSelf: "center",
+    marginTop: hp(2.5),
+    borderRadius: 16,
+    backgroundColor: "#fff",
+    overflow: "hidden",
+    shadowColor: "#130160",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  gallerySectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.4),
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F8",
+  },
+  galleryTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  galleryIconBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: "#130160",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  gallerySectionTitle: {
+    fontFamily: "Nunito-Bold",
+    fontSize: hp(2),
+    color: "#0a0a2e",
+  },
+  galleryCountBadge: {
+    backgroundColor: "#F0F0F8",
+    paddingHorizontal: wp(2.5),
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  galleryCountText: {
+    fontFamily: "Nunito-SemiBold",
+    fontSize: hp(1.5),
+    color: "#524B6B",
+  },
+  galleryCarouselWrapper: {
+    width: "100%",
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    overflow: "hidden",
+  },
 
   // ── Sections ─────────────────────────────────────────────────────────────
   section: {
-    flex: 1,
     width: "94%",
-    marginTop: hp(2),
+    marginTop: hp(2.5),
     marginHorizontal: "3%",
   },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginVertical: "2.5%",
-    paddingRight: "3%",
+    alignItems: "center",
+    marginBottom: hp(1),
+    paddingRight: "1%",
   },
-  sectionTitle: { fontFamily: "Nunito-Bold", fontSize: hp(2.3), color: "#000" },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  sectionAccentBar: {
+    width: 4,
+    height: hp(2.4),
+    borderRadius: 2,
+  },
+  sectionTitle: {
+    fontFamily: "Nunito-Bold",
+    fontSize: hp(2.3),
+    color: "#0a0a2e",
+  },
   viewAllText: {
     color: "#524B6B",
-    fontSize: hp(1.9),
+    fontSize: hp(1.8),
+    fontFamily: "Nunito-SemiBold",
     textDecorationLine: "underline",
   },
-  flatListPad: { marginVertical: "1%" },
+  flatListPad: { marginVertical: hp(0.5) },
 
   // ── Shared card image wrapper ─────────────────────────────────────────────
   cardImageWrapper: {
     width: "100%",
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
     overflow: "hidden",
   },
 
   // ── Trending cards ────────────────────────────────────────────────────────
   favouritePressable: {
-    width: wp(46),
+    width: wp(44),
     marginRight: wp(3),
-    marginVertical: hp(1),
+    marginVertical: hp(0.8),
   },
   favouriteCard: {
     width: "100%",
-    borderRadius: 10,
+    borderRadius: 12,
     elevation: 3,
     backgroundColor: "#fff",
     overflow: "hidden",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
   },
-  favouriteImage: {
-    width: "100%",
-    height: hp(15),
-  },
-  favouriteDescriptionContainer: {
-    padding: wp(2.5),
-  },
+  favouriteImage: { width: "100%", height: hp(15) },
+  favouriteDescriptionContainer: { padding: wp(2.5) },
   favouriteDescription: {
     fontFamily: "Nunito-SemiBold",
-    color: "#000",
+    color: "#222",
     fontSize: hp(1.5),
     marginBottom: hp(0.4),
+    lineHeight: hp(2.1),
   },
   favouriteDiscountPrice: {
     fontFamily: "Nunito-Bold",
-    color: "#000",
-    fontSize: hp(1.8),
+    color: "#130160",
+    fontSize: hp(1.9),
     marginBottom: hp(0.2),
   },
   favouritePriceText: {
@@ -751,8 +1041,8 @@ const styles = StyleSheet.create({
   },
   favouriteOriginalPrice: {
     fontFamily: "Nunito-Bold",
-    color: "#808488",
-    fontSize: hp(1.5),
+    color: "#aaa",
+    fontSize: hp(1.4),
     textDecorationLine: "line-through",
   },
 
@@ -760,48 +1050,57 @@ const styles = StyleSheet.create({
   promotionPressable: {
     width: wp(46),
     marginRight: wp(3),
-    marginVertical: hp(1),
+    marginVertical: hp(0.8),
   },
   promotionCard: {
     width: "100%",
-    borderRadius: 10,
+    borderRadius: 12,
     elevation: 3,
     backgroundColor: "#fff",
     overflow: "hidden",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
   },
-  promotionImage: {
-    width: "100%",
-    height: hp(16),
+  promotionImage: { width: "100%", height: hp(16) },
+  promotionBadge: {
+    position: "absolute",
+    top: hp(1),
+    left: wp(2),
+    backgroundColor: "#14BA9C",
+    paddingHorizontal: wp(2),
+    paddingVertical: 3,
+    borderRadius: 20,
   },
-  promotionContent: {
-    padding: wp(2.5),
+  promotionBadgeText: {
+    fontFamily: "Nunito-Bold",
+    color: "#fff",
+    fontSize: hp(1.3),
   },
+  promotionContent: { padding: wp(2.5) },
   promotionTitle: {
     fontFamily: "DMSans-Bold",
-    color: "#000",
-    fontSize: hp(1.5),
+    color: "#0a0a2e",
+    fontSize: hp(1.6),
     marginBottom: hp(0.3),
   },
   promotionDescription: {
     fontFamily: "Nunito-SemiBold",
-    color: "#000",
-    fontSize: hp(1.3),
-    marginBottom: hp(0.2),
+    color: "#555",
+    fontSize: hp(1.35),
+    marginBottom: hp(0.4),
+    lineHeight: hp(1.9),
   },
-  promotionStatus: {
-    fontFamily: "Nunito-Bold",
-    color: "#14BA9C",
-    fontSize: hp(1.5),
-    marginTop: hp(0.5),
+  promotionDateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: hp(0.4),
   },
   promotionDate: {
     fontFamily: "Nunito-SemiBold",
-    color: "#000",
+    color: "#524B6B",
     fontSize: hp(1.3),
-    marginTop: hp(0.3),
   },
 });

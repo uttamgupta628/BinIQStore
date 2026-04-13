@@ -75,7 +75,7 @@ const Dashboard3 = () => {
     isVerified && !isExpired
       ? isExpiringSoon
         ? "⚡ Renew Early"
-        : null // null = hide button if active
+        : null
       : isExpired
       ? "🔄 Renew Verification"
       : "🏆 Get Verified";
@@ -83,9 +83,10 @@ const Dashboard3 = () => {
 
   const uploadProgress = Math.min(totalUploads / MAX_UPLOADS, 1);
 
-  // ── Real promotion stats ───────────────────────────────────────
-  const usedPromos = user?.used_promotions ?? 0;
-  const totalPromos = user?.total_promotions ?? 0;
+  // ── Promotion stats (-1 = unlimited) ──────────────────────────
+  const usedPromos  = user?.used_promotions ?? 0;
+  const isUnlimited = user?.total_promotions === -1 || user?.total_promotions >= 9999;
+  const totalPromos = isUnlimited ? '∞' : (user?.total_promotions ?? 0);
 
   return (
     <View style={styles.container}>
@@ -135,7 +136,13 @@ const Dashboard3 = () => {
             </View>
             <View style={styles.promoStatDivider} />
             <View style={styles.promoStat}>
-              <Text style={styles.promoStatVal}>{totalPromos}</Text>
+              {/* ∞ gets larger green style */}
+              <Text style={[
+                styles.promoStatVal,
+                isUnlimited && styles.infinityText,
+              ]}>
+                {totalPromos}
+              </Text>
               <Text style={styles.promoStatLabel}>Total</Text>
             </View>
           </View>
@@ -157,7 +164,7 @@ const Dashboard3 = () => {
             <View style={{ height: hp(1.7) }} />
             <TouchableOpacity
               style={styles.cardButton}
-              onPress={() => navigation.navigate("UploadScreen")}
+              onPress={() => navigation.navigate("AddProduct")}
             >
               <Text style={styles.cardButtonText}>Quick Upload</Text>
             </TouchableOpacity>
@@ -277,17 +284,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginVertical: hp(1),
   },
-  promoStat: { alignItems: "center", paddingHorizontal: wp(3) },
-  promoStatVal: {
-    fontFamily: "Nunito-Bold",
-    fontSize: hp(2.4),
-    color: "#130160",
-  },
-  promoStatLabel: {
-    fontFamily: "Nunito-Regular",
-    fontSize: hp(1.3),
-    color: "#888",
-  },
+  promoStat:      { alignItems: "center", paddingHorizontal: wp(3) },
+  promoStatVal:   { fontFamily: "Nunito-Bold", fontSize: hp(2.4), color: "#130160" },
+  infinityText:   { fontSize: hp(3.2), color: "#14BA9C" }, // ∞ bigger + green
+  promoStatLabel: { fontFamily: "Nunito-Regular", fontSize: hp(1.3), color: "#888" },
   promoStatDivider: { width: 1, height: hp(4), backgroundColor: "#D0D0D0" },
 
   bottomcard2Title: {

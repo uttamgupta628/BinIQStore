@@ -20,17 +20,14 @@ import {
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import Carousel, { Pagination } from "react-native-snap-carousel";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import MaterialIcons from "react-native-vector-icons/MaterialIcons";
-import BinIQIcon from "../../../assets/BinIQIcon.svg";
-import Notification from "../../../assets/Notification.svg";
 import UploadPlus from "../../../assets/upload_plus.svg";
 import GiftIcon from "../../../assets/promo_Date.svg";
 import Dashboard from "./Dashboard";
 import Dashboard2 from "./Dashboard2";
 import Dashboard3 from "./Dashboard3";
 import Dashboard4 from "./Dashboard4";
+import CustomDrawer from "../../Components/CustomDrawer"; 
 import useStore from "../../store";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { width } = Dimensions.get("window");
 
@@ -45,7 +42,7 @@ const HomeScreen = ({ openDrawer }) => {
   const [isLoadingTrending, setIsLoadingTrending] = useState(true);
   const [isLoadingActivity, setIsLoadingActivity] = useState(true);
   const [isLoadingPromotions, setIsLoadingPromotions] = useState(true);
-  const [favorites, setFavorites] = useState(new Set());
+  const [drawerOpen, setDrawerOpen] = useState(false); // ← drawer state
 
   const {
     user,
@@ -54,27 +51,31 @@ const HomeScreen = ({ openDrawer }) => {
     fetchTrendingProducts,
     fetchActivityFeed,
     fetchPromotions,
+    fetchNotifications,
   } = useStore();
 
-  // Load favorites from AsyncStorage on mount
-  useEffect(() => {
-    const loadFavorites = async () => {
-      try {
-        const savedFavorites = await AsyncStorage.getItem("favorites");
-        if (savedFavorites) {
-          setFavorites(new Set(JSON.parse(savedFavorites)));
-        }
-      } catch (e) {
-        console.error("Load favorites error:", e.message);
-      }
-    };
-    loadFavorites();
-  }, []);
+  const notifications = useStore((state) => state.notifications);
 
-  // Re-fetches every time the screen comes into focus
+  const notifList = (() => {
+    if (!notifications) return [];
+    if (Array.isArray(notifications)) return notifications;
+    const { todays = [], yesturdays = [], olders = [] } = notifications;
+    return [...todays, ...yesturdays, ...olders];
+  })();
+
+  const unreadCount = notifList.filter((n) => !n.read).length;
+
   useFocusEffect(
     useCallback(() => {
       if (!accessToken) return;
+
+      const loadNotifications = async () => {
+        try {
+          await fetchNotifications();
+        } catch (e) {
+          console.error("Notifications error:", e.message);
+        }
+      };
 
       const loadTrending = async () => {
         setIsLoadingTrending(true);
@@ -115,37 +116,23 @@ const HomeScreen = ({ openDrawer }) => {
         }
       };
 
+      loadNotifications();
       loadTrending();
       loadActivity();
       loadPromotions();
-    }, [accessToken]),
+    }, [accessToken, fetchNotifications])
   );
-
-  const toggleFavorite = async (itemId) => {
-    const newFavorites = new Set(favorites);
-    if (newFavorites.has(itemId)) {
-      newFavorites.delete(itemId);
-    } else {
-      newFavorites.add(itemId);
-    }
-    setFavorites(newFavorites);
-    await AsyncStorage.setItem(
-      "favorites",
-      JSON.stringify(Array.from(newFavorites)),
-    );
-  };
 
   const handleLogout = () => {
     logout();
     navigation.replace("Login");
   };
 
-  // ── 4-slide carousel (from Doc 7) ─────────────────────────────────────────
   const carouselImages = [
-    { id: 1, isDashboard: true }, // Dashboard        — slide 1
-    { id: 2, isDashboard3: true }, // Dashboard3       — slide 2
-    { id: 3, isMap: true }, // Dashboard2       — slide 3 (store profile)
-    { id: 4, isDashboard4: true }, // Dashboard4       — slide 4 (verification plan)
+    { id: 1, isDashboard: true },
+    { id: 2, isDashboard3: true },
+    { id: 3, isMap: true },
+    { id: 4, isDashboard4: true },
   ];
 
   const renderCarouselItem = ({ item }) => {
@@ -176,7 +163,6 @@ const HomeScreen = ({ openDrawer }) => {
     return null;
   };
 
-  // ── Trending Products ─────────────────────────────────────────────────────
   const renderTrendingItem = ({ item }) => (
     <Pressable
       style={styles.favouritePressable}
@@ -219,7 +205,6 @@ const HomeScreen = ({ openDrawer }) => {
     </Pressable>
   );
 
-  // ── Activity Feed ─────────────────────────────────────────────────────────
   const renderActivityItem = ({ item }) => (
     <Pressable
       style={styles.productPressable}
@@ -239,17 +224,6 @@ const HomeScreen = ({ openDrawer }) => {
             resizeMode="cover"
           />
         </View>
-        {/* Heart icon kept from Doc 7 */}
-        <TouchableOpacity
-          onPress={() => toggleFavorite(item.id)}
-          style={styles.heartIconContainer}
-        >
-          <Ionicons
-            name="heart"
-            size={hp(3)}
-            color={favorites.has(item.id) ? "#EE2525" : "#ccc"}
-          />
-        </TouchableOpacity>
         <View style={styles.productContent}>
           <Text
             style={styles.productTitle}
@@ -271,7 +245,6 @@ const HomeScreen = ({ openDrawer }) => {
     </Pressable>
   );
 
-  // ── Promotions ────────────────────────────────────────────────────────────
   const renderPromotionItem = ({ item }) => (
     <Pressable
       style={styles.promotionPressable}
@@ -285,7 +258,7 @@ const HomeScreen = ({ openDrawer }) => {
       <View style={styles.promotionCard}>
         <View style={styles.imageWrapper}>
           <Image
-            source={item.image || PLACEHOLDER} // ✅ item.image (already mapped in store)
+            source={item.image ? item.image : PLACEHOLDER}
             style={styles.promotionImage}
             resizeMode="cover"
           />
@@ -303,8 +276,7 @@ const HomeScreen = ({ openDrawer }) => {
             numberOfLines={2}
             ellipsizeMode="tail"
           >
-            {item.shortDescription}{" "}
-            {/* ✅ shortDescription (mapped from description) */}
+            {item.shortDescription}
           </Text>
           <Text style={styles.promotionStatus}>{item.status || "Active"}</Text>
           <Text style={styles.promotionDate}>
@@ -342,7 +314,7 @@ const HomeScreen = ({ openDrawer }) => {
     </View>
   );
 
-  const pagination = () => (
+  const PaginationComponent = () => (
     <Pagination
       dotsLength={carouselImages.length}
       activeDotIndex={activeSlide}
@@ -355,240 +327,284 @@ const HomeScreen = ({ openDrawer }) => {
   );
 
   return (
-    <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-      <StatusBar translucent={true} backgroundColor={"transparent"} />
-      <ImageBackground
-        source={require("../../../assets/vector_1.png")}
-        style={styles.vector}
-      >
-        <View style={styles.headerContainer}>
-          <View style={styles.headerContent}>
-            <View style={styles.logoContainer}>
-              <BinIQIcon />
-            </View>
-            <View style={styles.headerIcons}>
-              <Pressable
-                style={styles.notificationButton}
-                onPress={() => navigation.navigate("Notifications")}
+    <View style={{ flex: 1 }}>
+      {/* ── Drawer overlay ─────────────────────────────────────────────────── */}
+      {drawerOpen && (
+        <Pressable
+          style={styles.drawerOverlay}
+          onPress={() => setDrawerOpen(false)}
+        />
+      )}
+      <CustomDrawer
+        isOpen={drawerOpen}
+        closeDrawer={() => setDrawerOpen(false)}
+      />
+
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <StatusBar translucent={true} backgroundColor={"transparent"} />
+        <ImageBackground
+          source={require("../../../assets/vector_1.png")}
+          style={styles.vector}
+        >
+          <View style={styles.headerContainer}>
+            <View style={styles.headerContent}>
+
+              {/* ── Hamburger ──────────────────────────────────────────────── */}
+              <TouchableOpacity
+                style={styles.hamburgerBtn}
+                onPress={() => setDrawerOpen(true)}
+                activeOpacity={0.7}
               >
-                <Notification height={hp(3)} width={hp(3)} />
-              </Pressable>
-              <TouchableOpacity onPress={handleLogout}>
-                <MaterialIcons name="logout" size={25} color={"#c0392b"} />
+                <View style={styles.hamburgerLine} />
+                <View style={[styles.hamburgerLine, styles.hamburgerLineMid]} />
+                <View style={styles.hamburgerLine} />
+              </TouchableOpacity>
+
+              {/* ── Right icons ────────────────────────────────────────────── */}
+              <View style={styles.headerIcons}>
+                <Pressable
+                  style={styles.notificationButton}
+                  onPress={() => navigation.navigate("Notifications")}
+                >
+                  <Ionicons
+                    name="notifications-outline"
+                    size={hp(3)}
+                    color="#130160"
+                  />
+                  {unreadCount > 0 && (
+                    <View style={styles.notifBadge}>
+                      <Text style={styles.notifBadgeText}>
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </Text>
+                    </View>
+                  )}
+                </Pressable>
+                <TouchableOpacity onPress={handleLogout}>
+                  <Ionicons name="log-out-outline" size={hp(3)} color="#c0392b" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.searchContainer}>
+              <TouchableOpacity
+                style={styles.uploadButton}
+                onPress={() => navigation.navigate("UploadChoiceScreen")}
+              >
+                <View style={styles.uploadIcon}>
+                  <UploadPlus />
+                </View>
+                <Text style={styles.uploadText}>UPLOAD</Text>
               </TouchableOpacity>
             </View>
           </View>
-          <View style={styles.searchContainer}>
+
+          <Carousel
+            data={carouselImages}
+            renderItem={renderCarouselItem}
+            sliderWidth={width}
+            itemWidth={width}
+            layout={"default"}
+            loop={true}
+            onSnapToItem={(index) => setActiveSlide(index)}
+          />
+          <PaginationComponent />
+        </ImageBackground>
+
+        {/* ── Trending Products ───────────────────────────────────────────── */}
+        <View style={styles.trendingSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Trending Products</Text>
             <TouchableOpacity
-              style={styles.uploadButton}
-              onPress={() => navigation.navigate("AddProduct")}
+              onPress={() =>
+                navigation.navigate("AllProductsScreen", {
+                  section: "Trending Products",
+                  data: trendingProducts,
+                })
+              }
             >
-              <View style={styles.uploadIcon}>
-                <UploadPlus />
-              </View>
-              <Text style={styles.uploadText}>UPLOAD NEW CONTENT</Text>
+              <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
           </View>
+          <View style={styles.flatListContainer}>
+            {isLoadingTrending ? (
+              <LoadingIndicator />
+            ) : (
+              <FlatList
+                data={trendingProducts.slice(0, 7)}
+                renderItem={renderTrendingItem}
+                keyExtractor={(item, index) =>
+                  item.id ? item.id.toString() : `trending-${index}`
+                }
+                horizontal={true}
+                showsHorizontalScrollIndicator={false}
+                ListEmptyComponent={
+                  <EmptyComponent message="No trending products" />
+                }
+              />
+            )}
+          </View>
+          {!isLoadingTrending && trendingProducts.length > 7 && (
+            <View style={styles.flatListContainer}>
+              <FlatList
+                data={trendingProducts.slice(7, 14)}
+                renderItem={renderTrendingItem}
+                keyExtractor={(item, index) =>
+                  item.id ? item.id.toString() : `trending2-${index}`
+                }
+                horizontal={true}
+                showsHorizontalScrollIndicator={false}
+              />
+            </View>
+          )}
         </View>
-        <Carousel
-          data={carouselImages}
-          renderItem={renderCarouselItem}
-          sliderWidth={width}
-          itemWidth={width}
-          layout={"default"}
-          loop={true}
-          onSnapToItem={(index) => setActiveSlide(index)}
-        />
-        {pagination()}
-      </ImageBackground>
 
-      {/* ── Trending Products ─────────────────────────────────────────────── */}
-      <View style={styles.trendingSection}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Trending Products</Text>
-          <TouchableOpacity
-            onPress={() =>
-              navigation.navigate("AllProductsScreen", {
-                section: "Trending Products",
-                data: trendingProducts,
-              })
-            }
-          >
-            <Text style={styles.viewAllText}>View All</Text>
-          </TouchableOpacity>
+        {/* ── Activity Feed ───────────────────────────────────────────────── */}
+        <View style={styles.activitySection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>MY ITEMS</Text>
+            <TouchableOpacity
+              onPress={() =>
+                navigation.navigate("AllProductsScreen", {
+                  section: "Activity Feed",
+                  data: activityFeed,
+                })
+              }
+            >
+              <Text style={styles.viewAllText}>View All</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.flatListContainer}>
+            {isLoadingActivity ? (
+              <LoadingIndicator />
+            ) : (
+              <FlatList
+                data={activityFeed.slice(0, 7)}
+                renderItem={renderActivityItem}
+                keyExtractor={(item, index) =>
+                  item.id ? item.id.toString() : `activity-${index}`
+                }
+                horizontal={true}
+                showsHorizontalScrollIndicator={false}
+                ListEmptyComponent={
+                  <EmptyComponent message="No activity feed" />
+                }
+              />
+            )}
+          </View>
+          {!isLoadingActivity && activityFeed.length > 7 && (
+            <View style={styles.flatListContainer}>
+              <FlatList
+                data={activityFeed.slice(7, 14)}
+                renderItem={renderActivityItem}
+                keyExtractor={(item, index) =>
+                  item.id ? item.id.toString() : `activity2-${index}`
+                }
+                horizontal={true}
+                showsHorizontalScrollIndicator={false}
+              />
+            </View>
+          )}
         </View>
-        <View style={styles.flatListContainer}>
-          {isLoadingTrending ? (
+
+        {/* ── Promotions ──────────────────────────────────────────────────── */}
+        <View style={styles.promotionSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>PROMOTIONS</Text>
+          </View>
+          {isLoadingPromotions ? (
             <LoadingIndicator />
           ) : (
             <FlatList
-              data={trendingProducts.slice(0, 7)}
-              renderItem={renderTrendingItem}
+              data={promotions.slice(0, 7)}
+              renderItem={renderPromotionItem}
               keyExtractor={(item, index) =>
-                item.id ? item.id.toString() : `trending-${index}`
+                item.id ? item.id.toString() : `promo-${index}`
               }
               horizontal={true}
               showsHorizontalScrollIndicator={false}
-              ListEmptyComponent={
-                <EmptyComponent message="No trending products" />
-              }
+              ListEmptyComponent={<EmptyComponent message="No promotions" />}
             />
           )}
         </View>
-        {!isLoadingTrending && trendingProducts.length > 7 && (
-          <View style={styles.flatListContainer}>
-            <FlatList
-              data={trendingProducts.slice(7, 14)}
-              renderItem={renderTrendingItem}
-              keyExtractor={(item, index) =>
-                item.id ? item.id.toString() : `trending2-${index}`
-              }
-              horizontal={true}
-              showsHorizontalScrollIndicator={false}
-            />
+
+        {/* ── IQ Portal ───────────────────────────────────────────────────── */}
+        <View style={styles.iqPortalSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>IQ PORTAL</Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate("IQPortal")}
+            >
+              <Text style={styles.viewAllText}>View All</Text>
+            </TouchableOpacity>
           </View>
-        )}
-      </View>
-
-      {/* ── Activity Feed ─────────────────────────────────────────────────── */}
-      <View style={styles.activitySection}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>ACTIVITY FEED</Text>
-          <TouchableOpacity
-            onPress={() =>
-              navigation.navigate("AllProductsScreen", {
-                section: "Activity Feed",
-                data: activityFeed,
-              })
-            }
-          >
-            <Text style={styles.viewAllText}>View All</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.flatListContainer}>
-          {isLoadingActivity ? (
-            <LoadingIndicator />
-          ) : (
-            <FlatList
-              data={activityFeed.slice(0, 7)}
-              renderItem={renderActivityItem}
-              keyExtractor={(item, index) =>
-                item.id ? item.id.toString() : `activity-${index}`
-              }
-              horizontal={true}
-              showsHorizontalScrollIndicator={false}
-              ListEmptyComponent={<EmptyComponent message="No activity feed" />}
-            />
-          )}
-        </View>
-        {!isLoadingActivity && activityFeed.length > 7 && (
-          <View style={styles.flatListContainer}>
-            <FlatList
-              data={activityFeed.slice(7, 14)}
-              renderItem={renderActivityItem}
-              keyExtractor={(item, index) =>
-                item.id ? item.id.toString() : `activity2-${index}`
-              }
-              horizontal={true}
-              showsHorizontalScrollIndicator={false}
-            />
+          <View style={styles.iqPortalContainer}>
+            <Pressable
+              style={styles.iqPortalPressable}
+              onPress={() => navigation.navigate("IQPortal")}
+            >
+              <View style={styles.iqPortalCard}>
+                <View style={styles.imageWrapper}>
+                  <Image
+                    source={require("../../../assets/reseller_training.png")}
+                    style={styles.iqPortalImage}
+                    resizeMode="cover"
+                  />
+                </View>
+                <View style={styles.iqPortalContent}>
+                  <Text
+                    style={styles.iqPortalMiniHeader}
+                    numberOfLines={2}
+                    ellipsizeMode="tail"
+                  >
+                    How to start a Bin Store
+                  </Text>
+                  <Text
+                    style={styles.iqPortalTitle}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    Bin Store
+                  </Text>
+                  <Text style={styles.iqPortalDetails}>
+                    Full Video • With PDF
+                  </Text>
+                </View>
+              </View>
+            </Pressable>
+            <Pressable
+              style={styles.iqPortalPressable}
+              onPress={() => navigation.navigate("IQPortal")}
+            >
+              <View style={styles.iqPortalCard}>
+                <View style={styles.imageWrapper}>
+                  <Image
+                    source={require("../../../assets/reseller_training.png")}
+                    style={styles.iqPortalImage}
+                    resizeMode="cover"
+                  />
+                </View>
+                <View style={styles.iqPortalContent}>
+                  <Text
+                    style={styles.iqPortalMiniHeader}
+                    numberOfLines={2}
+                    ellipsizeMode="tail"
+                  >
+                    Free Direct Contract Holder Training & Supplier List
+                  </Text>
+                  <Text
+                    style={styles.iqPortalTitle}
+                    numberOfLines={2}
+                    ellipsizeMode="tail"
+                  >
+                    Supplier Connect & Training
+                  </Text>
+                </View>
+              </View>
+            </Pressable>
           </View>
-        )}
-      </View>
-
-      {/* ── Promotions ────────────────────────────────────────────────────── */}
-      <View style={styles.promotionSection}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>PROMOTIONS</Text>
         </View>
-        {isLoadingPromotions ? (
-          <LoadingIndicator />
-        ) : (
-          <FlatList
-            data={promotions.slice(0, 7)}
-            renderItem={renderPromotionItem}
-            keyExtractor={(item, index) =>
-              item.id ? item.id.toString() : `promo-${index}`
-            }
-            horizontal={true}
-            showsHorizontalScrollIndicator={false}
-            ListEmptyComponent={<EmptyComponent message="No promotions" />}
-          />
-        )}
-      </View>
-
-      {/* ── IQ Portal ─────────────────────────────────────────────────────── */}
-      <View style={styles.iqPortalSection}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>IQ PORTAL</Text>
-        </View>
-        <View style={styles.iqPortalContainer}>
-          <Pressable
-            style={styles.iqPortalPressable}
-            onPress={() => navigation.navigate("IQPortal")}
-          >
-            <View style={styles.iqPortalCard}>
-              <View style={styles.imageWrapper}>
-                <Image
-                  source={require("../../../assets/reseller_training.png")}
-                  style={styles.iqPortalImage}
-                  resizeMode="cover"
-                />
-              </View>
-              <View style={styles.iqPortalContent}>
-                <Text
-                  style={styles.iqPortalMiniHeader}
-                  numberOfLines={2}
-                  ellipsizeMode="tail"
-                >
-                  How to start a Bin Store
-                </Text>
-                <Text
-                  style={styles.iqPortalTitle}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  Bin Store
-                </Text>
-                <Text style={styles.iqPortalDetails}>
-                  Full Video • With PDF
-                </Text>
-              </View>
-            </View>
-          </Pressable>
-          <Pressable
-            style={styles.iqPortalPressable}
-            onPress={() => navigation.navigate("IQPortal")}
-          >
-            <View style={styles.iqPortalCard}>
-              <View style={styles.imageWrapper}>
-                <Image
-                  source={require("../../../assets/reseller_training.png")}
-                  style={styles.iqPortalImage}
-                  resizeMode="cover"
-                />
-              </View>
-              <View style={styles.iqPortalContent}>
-                <Text
-                  style={styles.iqPortalMiniHeader}
-                  numberOfLines={2}
-                  ellipsizeMode="tail"
-                >
-                  Free Direct Contract Holder Training & Supplier List
-                </Text>
-                <Text
-                  style={styles.iqPortalTitle}
-                  numberOfLines={2}
-                  ellipsizeMode="tail"
-                >
-                  Supplier Connect & Training
-                </Text>
-              </View>
-            </View>
-          </Pressable>
-        </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 };
 
@@ -604,6 +620,16 @@ const styles = StyleSheet.create({
     width: wp(100),
     height: hp(80),
   },
+
+  // ── Drawer overlay ────────────────────────────────────────────────────────
+  drawerOverlay: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    zIndex: 10,
+  },
+
+  // ── Header ────────────────────────────────────────────────────────────────
   headerContainer: {
     marginTop: "6%",
   },
@@ -614,25 +640,56 @@ const styles = StyleSheet.create({
     marginVertical: "4%",
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
   },
-  logoContainer: {
-    width: "28%",
-    height: "100%",
+
+  // ── Hamburger ─────────────────────────────────────────────────────────────
+  hamburgerBtn: {
+    width: wp(10),
+    height: hp(5),
     justifyContent: "center",
-    alignItems: "flex-start",
+    gap: 5,
   },
+  hamburgerLine: {
+    width: 26,
+    height: 2.5,
+    backgroundColor: "#130160",
+    borderRadius: 2,
+  },
+  hamburgerLineMid: {
+    width: 18, // shorter middle line for style
+  },
+
+  // ── Right icons ───────────────────────────────────────────────────────────
   headerIcons: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    width: "20%",
-    height: "100%",
-    justifyContent: "space-between",
+    gap: 12,
   },
   notificationButton: {
-    justifyContent: "center",
-    alignItems: "flex-end",
+    position: "relative",
   },
+  notifBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    backgroundColor: "#FF3B30",
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: "#fff",
+  },
+  notifBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontFamily: "Nunito-Bold",
+    lineHeight: 13,
+  },
+
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -668,7 +725,7 @@ const styles = StyleSheet.create({
   paginationContainer: {
     position: "absolute",
     left: "43%",
-    bottom: "-8%",
+    bottom: "16%",
     width: wp(10),
     zIndex: 2,
   },
@@ -681,12 +738,10 @@ const styles = StyleSheet.create({
   paginationInactiveDot: {
     backgroundColor: "rgba(0, 0, 0, 0.3)",
   },
-
-  // ── Section layouts ───────────────────────────────────────────────────────
   trendingSection: {
     flex: 1,
     width: "94%",
-    marginTop: "6%",
+    marginTop: "-36%",
     marginHorizontal: "3%",
   },
   activitySection: {
@@ -737,16 +792,12 @@ const styles = StyleSheet.create({
     color: "#524B6B",
     fontSize: hp(1.8),
   },
-
-  // ── Shared image wrapper ──────────────────────────────────────────────────
   imageWrapper: {
     width: "100%",
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
     overflow: "hidden",
   },
-
-  // ── Trending (Favourite) cards ────────────────────────────────────────────
   favouritePressable: {
     width: wp(46),
     marginRight: wp(3),
@@ -793,8 +844,6 @@ const styles = StyleSheet.create({
     fontSize: hp(1.5),
     textDecorationLine: "line-through",
   },
-
-  // ── Activity Feed cards ───────────────────────────────────────────────────
   productPressable: {
     width: wp(46),
     marginRight: wp(3),
@@ -814,12 +863,6 @@ const styles = StyleSheet.create({
   productImage: {
     width: "100%",
     height: hp(14),
-  },
-  heartIconContainer: {
-    position: "absolute",
-    right: wp(2),
-    top: hp(0.5),
-    zIndex: 1,
   },
   productContent: {
     padding: wp(2.5),
@@ -841,8 +884,6 @@ const styles = StyleSheet.create({
     color: "#000",
     fontSize: hp(1.5),
   },
-
-  // ── Promotion cards ───────────────────────────────────────────────────────
   promotionPressable: {
     width: wp(46),
     marginRight: wp(3),
@@ -890,8 +931,6 @@ const styles = StyleSheet.create({
     fontSize: hp(1.4),
     marginTop: hp(0.3),
   },
-
-  // ── IQ Portal cards ───────────────────────────────────────────────────────
   iqPortalContainer: {
     flexDirection: "row",
     justifyContent: "space-between",

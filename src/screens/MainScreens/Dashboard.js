@@ -72,10 +72,11 @@ const Dashboard = () => {
   const followerProgress = Math.min(followers / 10000, 1);
   const viewProgress     = Math.min(monthlyViews / 100000, 1) * 100;
 
-  const totalScans  = user?.total_scans        ?? 0;
-  const scansUsed   = user?.scans_used?.length ?? 0;
-  const totalPromos = user?.total_promotions   ?? 0;
-  const usedPromos  = user?.used_promotions    ?? 0;
+  const usedPromos  = user?.used_promotions ?? 0;
+
+  // ── -1 means unlimited, show ∞ ────────────────────────────────
+  const isUnlimited = user?.total_promotions === -1 || user?.total_promotions >= 9999;
+  const totalPromos = isUnlimited ? '∞' : (user?.total_promotions ?? 0);
 
   const formatCount = n => {
     if (!n && n !== 0) return '0';
@@ -154,20 +155,8 @@ const Dashboard = () => {
 
       </View>
 
-      {/* ── Scans & Promo Row ── */}
+      {/* ── Promo Stats Row ── */}
       <View style={styles.statsRow}>
-
-        <View style={styles.statTile}>
-          <Text style={styles.statTileVal}>{totalScans}</Text>
-          <Text style={styles.statTileLabel}>Total Scans</Text>
-        </View>
-
-        <View style={styles.statDivider} />
-
-        <View style={styles.statTile}>
-          <Text style={styles.statTileVal}>{scansUsed}</Text>
-          <Text style={styles.statTileLabel}>Scans Used</Text>
-        </View>
 
         <View style={styles.statDivider} />
 
@@ -179,9 +168,17 @@ const Dashboard = () => {
         <View style={styles.statDivider} />
 
         <View style={styles.statTile}>
-          <Text style={styles.statTileVal}>{totalPromos}</Text>
+          {/* ∞ gets a larger font size for visual impact */}
+          <Text style={[
+            styles.statTileVal,
+            isUnlimited && styles.infinityText,
+          ]}>
+            {totalPromos}
+          </Text>
           <Text style={styles.statTileLabel}>Total Promos</Text>
         </View>
+
+        <View style={styles.statDivider} />
 
       </View>
 
@@ -266,7 +263,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Nunito-Bold', fontSize: hp(1.6), color: '#130160',
   },
 
-  // Scans & Promo row
+  // Promo stats row
   statsRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#F2F5F8', borderRadius: 10,
@@ -274,14 +271,11 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.06, shadowRadius: 3, elevation: 2,
   },
-  statTile: {flex: 1, alignItems: 'center'},
-  statTileVal: {
-    fontFamily: 'Nunito-Bold', fontSize: hp(2.1), color: '#130160',
-  },
-  statTileLabel: {
-    fontFamily: 'Nunito-Regular', fontSize: hp(1.2), color: '#888', marginTop: 1,
-  },
-  statDivider: {width: 1, height: hp(3.5), backgroundColor: '#D8D8D8'},
+  statTile:      {flex: 1, alignItems: 'center'},
+  statTileVal:   {fontFamily: 'Nunito-Bold', fontSize: hp(2.1), color: '#130160'},
+  infinityText:  {fontSize: hp(2.8), color: '#14BA9C'},   // ∞ bigger + green
+  statTileLabel: {fontFamily: 'Nunito-Regular', fontSize: hp(1.2), color: '#888', marginTop: 1},
+  statDivider:   {width: 1, height: hp(3.5), backgroundColor: '#D8D8D8'},
 
   // Verified banner
   verifiedBanner: {

@@ -48,11 +48,21 @@ const Login = () => {
     }
     setIsLoading(true);
     try {
-      await login({ email, password });
-      await fetchUserProfile(); // ✅ fetch fresh profile with populated subscription
+      await login({ email, password, role: 3 });
+
+      try {
+        await fetchUserProfile();
+      } catch (profileError) {
+        console.warn("Profile fetch failed (non-fatal):", profileError.message);
+      }
+
       navigation.replace("HomeNavigataor");
     } catch (error) {
-      Alert.alert("Error", error.message || "Login failed");
+      console.error("Login failed:", error);
+      Alert.alert(
+        "Login Failed",
+        error.message || "Invalid email or password"
+      );
     } finally {
       setIsLoading(false);
     }
@@ -65,13 +75,24 @@ const Login = () => {
         source={require("../../../assets/vector_1.png")}
         style={styles.vector}
       >
+        {/* Top spacer */}
         <View style={styles.headerSpacer} />
-        <View style={styles.welcomeContainer}>
-          <Text style={styles.welcomeText}>Welcome Back</Text>
-          <Text style={styles.subWelcomeText}>
-            Great to see you -{"\n"}Let's pick up you left off!
-          </Text>
+
+        {/* Logo */}
+        <View style={styles.logoContainer}>
+          <Image
+            source={require("../../../assets/logo.png")}
+            style={styles.logo}
+            resizeMode="contain"
+          />
         </View>
+
+        {/* Welcome Back */}
+        <View style={styles.welcomeContainer}>
+          <Text style={styles.welcomeText}>WELCOME BACK</Text>
+        </View>
+
+        {/* Inputs */}
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Email</Text>
           <View style={styles.inputWrapper}>
@@ -85,6 +106,7 @@ const Login = () => {
               keyboardType="email-address"
             />
           </View>
+
           <Text style={styles.label}>Password</Text>
           <View style={styles.inputWrapper}>
             <TextInput
@@ -107,6 +129,8 @@ const Login = () => {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Login Button */}
         <TouchableOpacity
           style={[styles.loginButton, isLoading && styles.disabledButton]}
           onPress={handleLogin}
@@ -118,17 +142,23 @@ const Login = () => {
             <Text style={styles.loginButtonText}>Login</Text>
           )}
         </TouchableOpacity>
+
+        {/* Forgot Password */}
         <TouchableOpacity
           style={styles.forgotPasswordButton}
           onPress={() => navigation.navigate("ForgotPassword")}
         >
           <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
         </TouchableOpacity>
+
+        {/* Divider */}
         <View style={styles.dividerContainer}>
           <View style={styles.line} />
           <Text style={styles.dividerText}>Or continue with</Text>
           <View style={styles.line} />
         </View>
+
+        {/* Google */}
         <View style={styles.socialContainer}>
           <View style={styles.socialButton}>
             <Image
@@ -137,12 +167,16 @@ const Login = () => {
             />
           </View>
         </View>
+
+        {/* Register */}
         <View style={styles.registerContainer}>
           <Text style={styles.registerPrompt}>Haven't an account? </Text>
           <TouchableOpacity onPress={() => navigation.navigate("SignUp")}>
             <Text style={styles.registerLink}>Register</Text>
           </TouchableOpacity>
         </View>
+
+        <View style={{ height: hp(4) }} />
       </ImageBackground>
     </ScrollView>
   );
@@ -158,27 +192,35 @@ const styles = StyleSheet.create({
   vector: {
     flex: 1,
     width: wp(100),
-    height: hp(100),
+    minHeight: hp(100),
   },
   headerSpacer: {
-    height: hp(7),
+    height: hp(6),
   },
+
+  // Logo
+  logoContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: hp(1.5),
+  },
+  logo: {
+    width: wp(45),
+    height: hp(10),
+  },
+
+  // Welcome
   welcomeContainer: {
-    height: hp(15),
-    width: wp(100),
-    padding: "5%",
+    alignItems: "center",
+    marginBottom: hp(1),
   },
   welcomeText: {
     fontFamily: "Nunito-Bold",
     fontSize: hp(3.6),
     color: "#14BA9C",
   },
-  subWelcomeText: {
-    fontFamily: "Nunito-Regular",
-    fontSize: hp(2),
-    color: "#524B6B",
-    marginTop: "5%",
-  },
+
+  // Inputs
   inputContainer: {
     padding: "5%",
   },
@@ -211,6 +253,8 @@ const styles = StyleSheet.create({
   eyeIcon: {
     padding: wp(2),
   },
+
+  // Login button
   loginButton: {
     backgroundColor: "#130160",
     width: "90%",
@@ -228,6 +272,8 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: hp(2.5),
   },
+
+  // Forgot password
   forgotPasswordButton: {
     backgroundColor: "transparent",
     justifyContent: "center",
@@ -239,6 +285,8 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito-SemiBold",
     textAlign: "center",
   },
+
+  // Divider
   dividerContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -255,6 +303,8 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito-SemiBold",
     color: "#A9A9A9",
   },
+
+  // Social
   socialContainer: {
     marginHorizontal: "5%",
     marginVertical: "5%",
@@ -276,6 +326,8 @@ const styles = StyleSheet.create({
     width: 45,
     height: 45,
   },
+
+  // Register
   registerContainer: {
     flexDirection: "row",
     alignSelf: "center",

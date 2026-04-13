@@ -73,39 +73,41 @@ const SignUp = () => {
     if (coords) { setUserLat(coords.lat); setUserLong(coords.lng); }
   };
 
-  const handleSignUp = async () => {
-    if (!firstName || !lastName || !email || !mobile || !address || !storeName || !password) {
-      Alert.alert("Error", "Please fill all fields"); return;
+ const handleSignUp = async () => {
+  if (!firstName || !lastName || !email || !mobile || !address || !storeName || !password) {
+    Alert.alert("Error", "Please fill all fields"); return;
+  }
+  if (!userLat || !userLong) {
+    Alert.alert("Error", "Please select a valid address from suggestions"); return;
+  }
+  setIsLoading(true);
+  try {
+    const response = await signup({
+      full_name: `${firstName.trim()} ${lastName.trim()}`,
+      email: email.trim(),
+      phone_number: mobile.trim(),
+      address: address.trim(),
+      store_name: storeName.trim(),
+      password,
+      confirm_password: password,
+      role: 3,
+      user_latitude: userLat,   // ← ADD THIS
+      user_longitude: userLong, // ← ADD THIS
+    });
+
+    if (response && (response.success === true || response.user_id)) {
+      Alert.alert("Success", "Account created! Please log in.", [
+        {text: "OK", onPress: () => navigation.dispatch(StackActions.replace("Login"))},
+      ]);
+    } else {
+      Alert.alert("Error", response?.message || "Signup failed");
     }
-    if (!userLat || !userLong) {
-      Alert.alert("Error", "Please select a valid address from suggestions"); return;
-    }
-    setIsLoading(true);
-    try {
-      const response = await signup({
-        full_name: `${firstName.trim()} ${lastName.trim()}`,
-        email: email.trim(),
-        phone_number: mobile.trim(),
-        address: address.trim(),
-        store_name: storeName.trim(),
-        password,
-        confirm_password: password,
-        role: 3,
-      });
-      // ✅ FIX: backend returns { success: true, user_id, message } — not response.email
-      if (response && (response.success === true || response.user_id)) {
-        Alert.alert("Success", "Account created! Please log in.", [
-          { text: "OK", onPress: () => navigation.dispatch(StackActions.replace("Login")) },
-        ]);
-      } else {
-        Alert.alert("Error", response?.message || "Signup failed");
-      }
-    } catch (err) {
-      Alert.alert("Error", err?.response?.data?.message || err.message || "Signup failed");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  } catch (err) {
+    Alert.alert("Error", err?.response?.data?.message || err.message || "Signup failed");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <>

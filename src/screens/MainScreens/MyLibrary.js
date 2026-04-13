@@ -22,23 +22,150 @@ import {
 } from "react-native-responsive-screen";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import {
-  Star,
-  Heart,
-  X,
-  Package,
-  Tag,
-  Calendar,
-  QrCode,
-  Trash2,
-  AlertCircle,
+  Star, Heart, X, Package, Tag, Calendar, QrCode, Trash2, AlertCircle,
 } from "lucide-react-native";
 import SearchIcon from "../../../assets/SearchIcon.svg";
 import Filter_NewIcon from "../../../assets/Filter_NewIcon.svg";
-import PieGraph from "../../../assets/PieGraph.svg";
-import Graph from "../../../assets/Graph.svg";
 import useStore from "../../store";
 
 const PLACEHOLDER = require("../../../assets/dummy_product.png");
+const PIE_COLORS = ["#0049AF", "#FFBB36", "#70B6C1", "#14BA9C", "#6F19C2", "#E8A020"];
+
+// ─────────────────────────────────────────────
+// REAL BAR CHART — store stats
+// ─────────────────────────────────────────────
+const MonthlyViewsChart = ({ monthlyViews, weeklyViews, totalLikes, totalFollowers }) => {
+  const data = [
+    { label: "Followers", value: totalFollowers ?? 0, color: "#130160" },
+    { label: "Likes",     value: totalLikes     ?? 0, color: "#14BA9C" },
+    { label: "Weekly",    value: weeklyViews    ?? 0, color: "#FFBB36" },
+    { label: "Total",     value: monthlyViews   ?? 0, color: "#2CCCA6" },
+  ];
+
+  const maxVal = Math.max(...data.map(d => d.value), 1);
+
+  return (
+    <View style={styles.graphCard}>
+      <Text style={chartStyles.chartTitle}>STORE VIEWS & STATS</Text>
+      <View style={chartStyles.barRow}>
+        {data.map((item, i) => {
+          const barH = Math.max((item.value / maxVal) * hp(10), 4);
+          return (
+            <View key={i} style={chartStyles.barCol}>
+              {item.value > 0 && (
+                <Text style={chartStyles.barValue}>
+                  {item.value >= 1000 ? `${(item.value / 1000).toFixed(1)}k` : item.value}
+                </Text>
+              )}
+              <View style={[chartStyles.bar, { height: barH, backgroundColor: item.color }]} />
+              <Text style={chartStyles.barLabel}>{item.label}</Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
+
+// ─────────────────────────────────────────────
+// REAL PIE CHART — promotions by category
+// ─────────────────────────────────────────────
+const CategoryPieChart = ({ promotions, categoryMap }) => {
+  if (!promotions || promotions.length === 0) {
+    return (
+      <View style={{ height: hp(20), justifyContent: "center", alignItems: "center" }}>
+        <Text style={{ color: "#130160", fontFamily: "Nunito-SemiBold", fontSize: hp(2), textDecorationLine: "underline", marginBottom: hp(2) }}>
+          UPLOADS CATEGORY
+        </Text>
+        <Tag size={36} color="#ccc" />
+        <Text style={{ color: "#999", fontFamily: "Nunito-Regular", fontSize: hp(1.7), marginTop: 8 }}>
+          No promotions yet
+        </Text>
+      </View>
+    );
+  }
+
+  const countMap = {};
+  promotions.forEach((p) => {
+    let catName = "General";
+    if (p.category_id && typeof p.category_id === "object") {
+      catName = p.category_id.category_name || p.category_id.name || "General";
+    } else if (p.category_id && typeof p.category_id === "string") {
+      catName = categoryMap?.[p.category_id] || "General";
+    } else if (p.category && typeof p.category === "object") {
+      catName = p.category.category_name || p.category.name || "General";
+    } else if (p.category_name) {
+      catName = p.category_name;
+    }
+    countMap[catName] = (countMap[catName] || 0) + 1;
+  });
+
+  const total   = promotions.length;
+  const entries = Object.entries(countMap).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const top3    = entries.slice(0, 3);
+
+  return (
+    <View style={{ height: hp(38), flexDirection: "row" }}>
+      {/* Left side */}
+      <View style={{ width: "72%", justifyContent: "space-around", alignItems: "center" }}>
+        <View style={{ width: "80%" }}>
+          <Text style={{ color: "#130160", fontFamily: "Nunito-SemiBold", fontSize: hp(2), textDecorationLine: "underline" }}>
+            UPLOADS CATEGORY
+          </Text>
+        </View>
+
+        {/* Concentric rings as pie visual */}
+        <View style={chartStyles.pieWrapper}>
+          {entries.map(([cat, count], i) => {
+            const size = hp(9) - i * hp(1.3);
+            if (size <= 0) return null;
+            return (
+              <View key={cat} style={{
+                position: "absolute",
+                width: size, height: size,
+                borderRadius: size / 2,
+                borderColor: PIE_COLORS[i % PIE_COLORS.length],
+                borderWidth: hp(0.9),
+              }} />
+            );
+          })}
+          <View style={chartStyles.pieCenter}>
+            <Text style={chartStyles.pieCenterNum}>{total}</Text>
+            <Text style={chartStyles.pieCenterLabel}>total</Text>
+          </View>
+        </View>
+
+        {/* Bottom legend */}
+        <View style={{ flexDirection: "row", justifyContent: "space-between", width: "90%", flexWrap: "wrap" }}>
+          {top3.map(([cat], i) => (
+            <View key={cat} style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+              <View style={{ width: wp(4), height: hp(1.2), backgroundColor: PIE_COLORS[i % PIE_COLORS.length], borderRadius: 3 }} />
+              <Text style={{ color: "#000", fontSize: hp(1.4) }} numberOfLines={1}> {cat}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* Right side — percentages */}
+      <View style={{ width: "28%", height: "60%", alignSelf: "center", justifyContent: "space-between" }}>
+        {top3.map(([cat, count], i) => {
+          const pct = Math.round((count / total) * 100);
+          return (
+            <View key={cat} style={{ height: "18%", width: "100%", paddingRight: "4%", marginBottom: hp(1.5) }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <View style={{ width: 13, height: 13, backgroundColor: PIE_COLORS[i % PIE_COLORS.length], borderRadius: 20 }} />
+                <Text style={{ color: "gray", fontSize: hp(1.6) }} numberOfLines={1}>{cat}</Text>
+              </View>
+              <View style={{ width: "68%", alignSelf: "flex-end", paddingVertical: "1%" }}>
+                <Text style={{ color: "#000", fontWeight: "600", fontSize: hp(2.2) }}>{pct}%</Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
 
 // ─────────────────────────────────────────────
 // SCAN DETAIL MODAL
@@ -116,58 +243,104 @@ const ScanDetailModal = ({ visible, scan, onClose, onDelete }) => {
 // SCAN HISTORY SCREEN
 // ─────────────────────────────────────────────
 const ScanHistoryScreen = () => {
-  const navigation = useNavigation();
-  const accessToken = useStore((state) => state.accessToken);
-  const fetchScans = useStore((state) => state.fetchScans);
-  const deleteScan = useStore((state) => state.deleteScan);
+  const navigation        = useNavigation();
+  const accessToken       = useStore((state) => state.accessToken);
+  const user              = useStore((state) => state.user);
+  const store             = useStore((state) => state.store);
+  const fetchScans        = useStore((state) => state.fetchScans);
+  const deleteScan        = useStore((state) => state.deleteScan);
+  const fetchUserProfile  = useStore((state) => state.fetchUserProfile);
+  const fetchPromotions   = useStore((state) => state.fetchPromotions);
+  const fetchCategories   = useStore((state) => state.fetchCategories);
+  const fetchStoreDetails = useStore((state) => state.fetchStoreDetails); // ✅ FIXED: added
 
-  const [scans, setScans] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [totalScans, setTotalScans] = useState(0);
-  const [scansRemaining, setScansRemaining] = useState(100);
+  const [scans, setScans]               = useState([]);
+  const [promotions, setPromotions]     = useState([]);
+  const [categoryMap, setCategoryMap]   = useState({});
+  const [loading, setLoading]           = useState(true);
+  const [refreshing, setRefreshing]     = useState(false);
   const [selectedScan, setSelectedScan] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const [authError, setAuthError] = useState(false);
+  const [authError, setAuthError]       = useState(false);
 
-  const loadScans = useCallback(async (isRefresh = false) => {
-    if (!accessToken) {
-      setLoading(false);
-      setAuthError(true);
-      return;
-    }
+  const totalScanLimit  = user?.total_scans ?? 100;
+  const scansUsedCount  = user?.scans_used?.length ?? 0;
+  const scansRemaining  = Math.max(totalScanLimit - scansUsedCount, 0);
+  const progressPercent = totalScanLimit > 0
+    ? Math.min((scansUsedCount / totalScanLimit) * 100, 100) : 0;
+
+  // ✅ FIXED: all four derived store values declared here
+  const monthlyViews   = store?.monthly_views ?? store?.views_count ?? store?.views ?? 0;
+  const weeklyViews    = store?.views_this_week ?? store?.weekly_views ?? 0;
+  const totalLikes     = store?.total_likes ?? store?.likes ?? 0;
+  const totalFollowers = store?.total_followers ?? store?.followers ?? 0;
+
+  const loadData = useCallback(async (isRefresh = false) => {
+    if (!accessToken) { setLoading(false); setAuthError(true); return; }
     setAuthError(false);
     try {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
-      const result = await fetchScans();
-      if (result?.success) {
-        setScans(result.data || []);
-        setTotalScans(result.data?.length || 0);
-        setScansRemaining(100 - (result.data?.length || 0));
+
+      // ✅ FIXED: 5 promises, 5 variables — fetchStoreDetails included
+      const [scanResult, profileResult, promoResult, categoryResult] = await Promise.all([
+        fetchScans(),
+        fetchUserProfile(),
+        fetchPromotions().catch(() => []),
+        fetchCategories().catch(() => []),
+        fetchStoreDetails().catch(() => null), // ✅ loads store into Zustand state
+      ]);
+
+      // Build categoryMap { _id: category_name }
+      if (Array.isArray(categoryResult)) {
+        const map = {};
+        categoryResult.forEach((cat) => {
+          if (cat.value && cat.label) map[cat.value] = cat.label;
+        });
+        setCategoryMap(map);
       }
+
+      // Handle scans
+      if (scanResult?.success) {
+        setScans(scanResult.data || []);
+      } else if (Array.isArray(scanResult)) {
+        setScans(scanResult);
+      }
+
+      // Handle promotions — use promoResult if valid, else fall back to user profile promotions
+      let finalPromos = [];
+      if (Array.isArray(promoResult) && promoResult.length > 0) {
+        finalPromos = promoResult;
+      } else if (profileResult?.promotions && Array.isArray(profileResult.promotions)) {
+        finalPromos = profileResult.promotions;
+      }
+      setPromotions(finalPromos);
+
     } catch (error) {
-      if (error?.response?.status === 401) setAuthError(true);
-      else Alert.alert("Error", "Failed to load scans. Please try again.");
+      if (error?.response?.status === 401 || error?.message?.includes("401")) {
+        setAuthError(true);
+      } else {
+        Alert.alert("Error", "Failed to load data. Please try again.");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [accessToken, fetchScans]);
+  // ✅ FIXED: fetchStoreDetails added to dependency array
+  }, [accessToken, fetchScans, fetchUserProfile, fetchPromotions, fetchCategories, fetchStoreDetails]);
 
-  useEffect(() => { loadScans(); }, [loadScans]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const handleDeleteScan = async (scanId) => {
     try {
       const result = await deleteScan(scanId);
-      if (result?.success) {
+      if (result?.success || result?.message) {
         setScans((prev) => prev.filter((s) => s.scan_id !== scanId));
-        setTotalScans((prev) => prev - 1);
-        setScansRemaining((prev) => prev + 1);
         setModalVisible(false);
+        await fetchUserProfile();
         Alert.alert("Deleted", "Scan removed from your library.");
       }
-    } catch (error) {
+    } catch {
       Alert.alert("Error", "Failed to delete scan.");
     }
   };
@@ -183,7 +356,11 @@ const ScanHistoryScreen = () => {
   const oldestScans = [...scans].sort((a, b) => new Date(a.scanned_at) - new Date(b.scanned_at));
 
   const renderScanCard = ({ item }) => (
-    <TouchableOpacity style={styles.card} onPress={() => { setSelectedScan(item); setModalVisible(true); }} activeOpacity={0.85}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => { setSelectedScan(item); setModalVisible(true); }}
+      activeOpacity={0.85}
+    >
       {item.image ? (
         <Image source={{ uri: item.image }} style={styles.image} resizeMode="cover" />
       ) : (
@@ -208,7 +385,10 @@ const ScanHistoryScreen = () => {
         <AlertCircle size={48} color="#E53935" />
         <Text style={[scanStyles.emptyTitle, { color: "#E53935" }]}>Session Expired</Text>
         <Text style={scanStyles.emptySubtitle}>Please log out and log back in to view your scans.</Text>
-        <TouchableOpacity style={[styles.gettingStarted, { marginTop: hp(2), width: "70%" }]} onPress={() => loadScans()}>
+        <TouchableOpacity
+          style={[styles.gettingStarted, { marginTop: hp(2), width: "70%" }]}
+          onPress={() => loadData()}
+        >
           <Text style={{ color: "#fff", fontFamily: "Nunito-SemiBold", fontSize: hp(1.9) }}>Retry</Text>
         </TouchableOpacity>
       </View>
@@ -222,64 +402,46 @@ const ScanHistoryScreen = () => {
           <View style={styles.cameraButton}><SearchIcon /></View>
           <Text style={styles.input}>search for anything</Text>
         </Pressable>
-        <TouchableOpacity style={styles.menuButton}><Filter_NewIcon /></TouchableOpacity>
+        {/* <TouchableOpacity style={styles.menuButton}><Filter_NewIcon /></TouchableOpacity> */}
       </View>
 
+      {/* Scan counter */}
       <View style={scanStyles.counterRow}>
         <View style={scanStyles.counterBadge}>
           <QrCode size={14} color="#fff" />
-          <Text style={scanStyles.counterText}>{totalScans} / 100 Scans Used</Text>
+          <Text style={scanStyles.counterText}>{scansUsedCount} / {totalScanLimit} Scans Used</Text>
         </View>
         <Text style={scanStyles.remainingText}>{scansRemaining} remaining</Text>
       </View>
 
+      {/* Progress bar */}
       <View style={scanStyles.progressContainer}>
         <View style={scanStyles.progressTrack}>
-          <View style={[scanStyles.progressFill, { width: `${Math.min((totalScans / 100) * 100, 100)}%` }]} />
+          <View style={[scanStyles.progressFill, { width: `${progressPercent}%` }]} />
         </View>
       </View>
 
-      <View style={styles.graphCard}>
-        <Text style={{ fontSize: wp(3.7), color: "#130160", fontFamily: "Nunito-Bold" }}>VIEWS</Text>
-        <Graph width={"98%"} height={"90%"} />
-      </View>
+      {/* ✅ FIXED: all four props now properly defined */}
+      <MonthlyViewsChart
+        monthlyViews={monthlyViews}
+        weeklyViews={weeklyViews}
+        totalLikes={totalLikes}
+        totalFollowers={totalFollowers}
+      />
 
-      <TouchableOpacity style={styles.gettingStarted} onPress={() => navigation.navigate("UploadScreen")}>
-        <Text style={{ fontFamily: "Nunito-SemiBold", color: "#fff", fontSize: hp(2) }}>Upload New Content</Text>
+      <TouchableOpacity
+        style={styles.gettingStarted}
+        onPress={() => navigation.navigate("UploadChoiceScreen")}
+      >
+        <Text style={{ fontFamily: "Nunito-SemiBold", color: "#fff", fontSize: hp(2) }}>
+          Upload New Content
+        </Text>
       </TouchableOpacity>
 
-      <View style={{ height: hp(38), flexDirection: "row" }}>
-        <View style={{ width: "72%", justifyContent: "space-around", alignItems: "center" }}>
-          <View style={{ width: "80%" }}>
-            <Text style={{ color: "#130160", fontFamily: "Nunito-SemiBold", fontSize: hp(2), textDecorationLine: "underline" }}>
-              UPLOADS CATEGORY
-            </Text>
-          </View>
-          <PieGraph />
-          <View style={{ flexDirection: "row", justifyContent: "space-between", width: "90%" }}>
-            {[{ color: "#0049AF", label: "Category 1" }, { color: "#FFBB36", label: "Category 2" }, { color: "#70B6C1", label: "Category 3" }].map((c, i) => (
-              <View key={i} style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={{ width: wp(4), height: hp(1.2), backgroundColor: c.color, borderRadius: 3 }} />
-                <Text style={{ color: "#000", fontSize: hp(1.4) }}> {c.label}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-        <View style={{ width: "28%", height: "60%", alignSelf: "center", justifyContent: "space-between" }}>
-          {[{ color: "#0049AF", label: "Category 1" }, { color: "#70B6C1", label: "Category 2" }, { color: "#6F19C2", label: "Category 3" }].map((c, i) => (
-            <View key={i} style={{ height: "18%", width: "100%", paddingRight: "4%" }}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                <View style={{ width: 13, height: 13, backgroundColor: c.color, borderRadius: 20 }} />
-                <Text style={{ color: "gray", fontSize: hp(1.9) }}>{c.label}</Text>
-              </View>
-              <View style={{ width: "68%", alignSelf: "flex-end", paddingVertical: "1%" }}>
-                <Text style={{ color: "#000", fontWeight: "600", fontSize: hp(2.2) }}>45%</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      </View>
+      {/* Pie chart — always renders, shows empty state if no promos */}
+      <CategoryPieChart promotions={promotions} categoryMap={categoryMap} />
 
+      {/* Recent Scans */}
       <View style={scanStyles.sectionHeader}>
         <Text style={scanStyles.sectionTitle}>RECENT SCANS</Text>
         <Text style={scanStyles.sectionCount}>{recentScans.length} items</Text>
@@ -304,10 +466,13 @@ const ScanHistoryScreen = () => {
           numColumns={3}
           showsVerticalScrollIndicator={false}
           scrollEnabled={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadScans(true)} colors={["#2CCCA6"]} />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => loadData(true)} colors={["#2CCCA6"]} />
+          }
         />
       )}
 
+      {/* Oldest Scans */}
       {!loading && oldestScans.length > 0 && (
         <>
           <View style={scanStyles.sectionHeader}>
@@ -338,15 +503,15 @@ const ScanHistoryScreen = () => {
 };
 
 // ─────────────────────────────────────────────
-// MY ITEMS SCREEN — fetches from backend
+// MY ITEMS SCREEN
 // ─────────────────────────────────────────────
 const MyItemsScreen = () => {
-  const navigation = useNavigation();
+  const navigation            = useNavigation();
   const fetchTrendingProducts = useStore((state) => state.fetchTrendingProducts);
-  const accessToken = useStore((state) => state.accessToken);
+  const accessToken           = useStore((state) => state.accessToken);
 
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems]           = useState([]);
+  const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadItems = useCallback(async (isRefresh = false) => {
@@ -392,7 +557,7 @@ const MyItemsScreen = () => {
           <View style={styles.cameraButton}><SearchIcon /></View>
           <Text style={styles.input}>search for anything</Text>
         </Pressable>
-        <TouchableOpacity style={styles.menuButton}><Filter_NewIcon /></TouchableOpacity>
+        {/* <TouchableOpacity style={styles.menuButton}><Filter_NewIcon /></TouchableOpacity> */}
       </View>
 
       <TouchableOpacity style={styles.gettingStarted} onPress={() => navigation.navigate("AddProduct")}>
@@ -418,7 +583,9 @@ const MyItemsScreen = () => {
           numColumns={3}
           showsVerticalScrollIndicator={false}
           scrollEnabled={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadItems(true)} colors={["#130160"]} />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => loadItems(true)} colors={["#130160"]} />
+          }
         />
       )}
     </View>
@@ -426,17 +593,17 @@ const MyItemsScreen = () => {
 };
 
 // ─────────────────────────────────────────────
-// PROMOTIONS SCREEN — fetches from backend
+// PROMOTIONS SCREEN
 // ─────────────────────────────────────────────
 const AllTotalScans = () => {
-  const navigation = useNavigation();
+  const navigation      = useNavigation();
   const fetchPromotions = useStore((state) => state.fetchPromotions);
-  const accessToken = useStore((state) => state.accessToken);
+  const accessToken     = useStore((state) => state.accessToken);
 
-  const [promotions, setPromotions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [active, setActive] = useState(true);
+  const [promotions, setPromotions]   = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [refreshing, setRefreshing]   = useState(false);
+  const [active, setActive]           = useState(true);
 
   const loadPromotions = useCallback(async (isRefresh = false) => {
     if (!accessToken) { setLoading(false); return; }
@@ -456,7 +623,6 @@ const AllTotalScans = () => {
 
   useEffect(() => { loadPromotions(); }, [loadPromotions]);
 
-  // ✅ Filter by status field from backend
   const now = new Date();
   const activePromos = promotions.filter((p) => {
     if (p.status === "Active" || p.status === "active") return true;
@@ -468,7 +634,6 @@ const AllTotalScans = () => {
     if (p.end_date) return new Date(p.end_date) < now;
     return false;
   });
-
   const displayedPromos = active ? activePromos : expiredPromos;
 
   const renderItem = ({ item }) => (
@@ -494,7 +659,6 @@ const AllTotalScans = () => {
 
   return (
     <View style={{ width: "100%" }}>
-      {/* Toggle */}
       <View style={{ width: "95%", alignSelf: "center", marginVertical: "5%" }}>
         <View style={{ flexDirection: "row", width: "100%", height: 50, backgroundColor: "#DDF4F3", borderRadius: 5 }}>
           <TouchableOpacity
@@ -537,7 +701,9 @@ const AllTotalScans = () => {
           numColumns={3}
           showsVerticalScrollIndicator={false}
           scrollEnabled={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadPromotions(true)} colors={["#130160"]} />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => loadPromotions(true)} colors={["#130160"]} />
+          }
           style={{ marginBottom: "5%" }}
         />
       )}
@@ -575,8 +741,8 @@ const MyLibrary = () => {
 
         <View style={styles.tabContainer}>
           {[
-            { key: "scan", label: "Feed" },
-            { key: "items", label: "Items" },
+            { key: "scan",      label: "Feed" },
+            { key: "items",     label: "Items" },
             { key: "all_scans", label: "Promotion" },
           ].map((tab) => (
             <TouchableOpacity
@@ -592,14 +758,50 @@ const MyLibrary = () => {
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {activeTab === "scan" && <ScanHistoryScreen />}
-          {activeTab === "items" && <MyItemsScreen />}
+          {activeTab === "scan"      && <ScanHistoryScreen />}
+          {activeTab === "items"     && <MyItemsScreen />}
           {activeTab === "all_scans" && <AllTotalScans />}
         </ScrollView>
       </ImageBackground>
     </View>
   );
 };
+
+// ─────────────────────────────────────────────
+// CHART STYLES
+// ─────────────────────────────────────────────
+const chartStyles = StyleSheet.create({
+  chartTitle: {
+    fontSize: wp(3.7), color: "#130160",
+    fontFamily: "Nunito-Bold", marginBottom: 6, alignSelf: "flex-start",
+  },
+  barRow: {
+    flexDirection: "row", alignItems: "flex-end",
+    justifyContent: "space-around", height: hp(13), width: "100%",
+  },
+  barCol: { alignItems: "center", justifyContent: "flex-end", flex: 1 },
+  bar: { width: wp(5), borderRadius: 4, marginBottom: 4 },
+  barValue: {
+    fontFamily: "Nunito-Bold", fontSize: hp(1.2),
+    color: "#130160", marginBottom: 2,
+  },
+  barLabel: {
+    fontFamily: "Nunito-Regular", fontSize: hp(1.2), color: "#666",
+  },
+  pieWrapper: {
+    width: hp(9), height: hp(9),
+    justifyContent: "center", alignItems: "center",
+  },
+  pieCenter: {
+    justifyContent: "center", alignItems: "center", zIndex: 10,
+  },
+  pieCenterNum: {
+    fontFamily: "Nunito-Bold", fontSize: hp(2), color: "#130160",
+  },
+  pieCenterLabel: {
+    fontFamily: "Nunito-Regular", fontSize: hp(1.1), color: "#888",
+  },
+});
 
 // ─────────────────────────────────────────────
 // STYLES
@@ -654,13 +856,12 @@ const styles = StyleSheet.create({
   content: { flex: 1, paddingHorizontal: "2%", paddingVertical: "2%" },
   vector: { flex: 1, width: wp(100), height: hp(50) },
   card: { width: "20%", flex: 1, backgroundColor: "#fff", borderRadius: 8, padding: "2%", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3, marginHorizontal: "0.85%", marginBottom: "5%" },
-  graphCard: { flex: 1, width: "95%", height: hp(18), backgroundColor: "#F2F5F8", borderRadius: 6, marginHorizontal: 5, elevation: 2, paddingVertical: "2.5%", alignItems: "center", alignSelf: "center" },
+  graphCard: { flex: 1, width: "95%", height: hp(22), backgroundColor: "#F2F5F8", borderRadius: 6, marginHorizontal: 5, elevation: 2, paddingVertical: "2.5%", paddingHorizontal: "2%", alignItems: "center", alignSelf: "center" },
   image: { width: "100%", height: hp(8), borderRadius: 6, marginBottom: 8 },
   name: { fontSize: hp(1.36), marginBottom: 4, color: "#000", fontFamily: "DMSans-SemiBold" },
   subtitle: { fontSize: hp(1.5), color: "#14BA9C", fontFamily: "DMSans-SemiBold", marginBottom: "4%" },
   ratingContainer: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
   rating: { fontSize: hp(1.3), fontWeight: "bold", color: "#000" },
-  reviews: { marginLeft: 4, fontSize: hp(1.2), color: "#666" },
   heartButton: { position: "absolute", bottom: "2%", right: "1%", borderRadius: 15, padding: 5 },
   searchParent: { flexDirection: "row", alignItems: "center", marginHorizontal: "3%" },
   searchContainer: { flex: 1, flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 12, marginRight: 10, borderColor: "#99ABC678", height: hp(6.5), backgroundColor: "#F2F2F2" },

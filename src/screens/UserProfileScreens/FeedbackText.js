@@ -1,116 +1,433 @@
-import { ImageBackground, StatusBar, StyleSheet, Text, View, Dimensions, TextInput } from 'react-native'
-import React, { useState } from 'react'
-import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
-import { TouchableOpacity } from 'react-native-gesture-handler';
-import { useNavigation } from '@react-navigation/native';
-import AntDesign from 'react-native-vector-icons/AntDesign';
-import StarRating from 'react-native-star-rating-widget';
+import {
+  ImageBackground,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from 'react-native';
+import React, {useState} from 'react';
+import {
+  heightPercentageToDP as hp,
+  widthPercentageToDP as wp,
+} from 'react-native-responsive-screen';
+import {TouchableOpacity} from 'react-native-gesture-handler';
+import {useNavigation, useRoute} from '@react-navigation/native';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import axios from 'axios';
+import useStore from '../../store/index';
 
-const { width, height } = Dimensions.get('window')
+const BASE_URL = 'https://biniq.onrender.com/api';
+
 const FeedbackText = () => {
-    const navigation = useNavigation();
-    const [rating, setRating] = useState(0);
-    return (
-        <View style={styles.container}>
-            <StatusBar translucent={true} backgroundColor={'transparent'}/>
-            <ImageBackground
-                source={require('../../../assets/vector_1.png')}
-                style={styles.vector}
-                resizeMode="stretch"
-            >
-                <View style={styles.reviewContainer}>
-                    <View style={styles.cancelMark}>
-                        <TouchableOpacity style={{backgroundColor: '#74748014', height: hp(3.5), width: wp(7), borderRadius: 20, justifyContent: 'center', alignItems: 'center'}}>
-                        <AntDesign name='close' color='#3C3C4399' size={hp(2.3)}/>
-                        </TouchableOpacity>
-                    </View>
-                    <View style={styles.main}>
-                        <View style={styles.textContainer}>
-                            <Text style={{ fontFamily: 'Nunito-Bold', color: '#000', textAlign: 'center', fontSize: hp(2.6) }}>What could we do better?</Text>
-                            <Text style={{ fontFamily: 'Nunito-SemiBold', color: '#52525B', fontSize: hp(2.2) }}>We’re sorry to hear you didn’t like BinIQ’s this service! Please share what we can do to improve.</Text>
-                            <View style={styles.inputsContainer}> 
-                                <TextInput
-                                    placeholder='User name'
-                                    placeholderTextColor={'#A1A1AA'}
-                                    style={{fontFamily: 'Nunito-SemiBold', fontSize: hp(2)}}
-                                />
-                            </View>
-                            <View style={styles.inputsContainer}> 
-                                <TextInput
-                                    placeholder='User email'
-                                    placeholderTextColor={'#A1A1AA'}
-                                    style={{fontFamily: 'Nunito-SemiBold', fontSize: hp(2)}}
-                                />
-                            </View>
-                            <View style={{...styles.inputsContainer, height: hp(17)}}> 
-                                <TextInput
-                                    placeholder='Suggest anything, How can we improve?'
-                                    placeholderTextColor={'#A1A1AA'}
-                                    style={{fontFamily: 'Nunito-SemiBold', fontSize: hp(2)}}
-                                />
-                            </View>
-                        </View>
-                        <TouchableOpacity style={styles.gettingStarted}>
-                    <Text style={{ fontFamily: 'Nunito-SemiBold', color: '#fff', fontSize: hp(2.5) }}>Submit Feedback</Text>
-                </TouchableOpacity>
-                    </View>
-                </View>
-            </ImageBackground>
-        </View>
-    )
-}
+  const navigation = useNavigation();
+  const route = useRoute();
+  const rating = route.params?.rating || 0;
 
-export default FeedbackText
+  const {accessToken} = useStore();
+
+  const [feedbackText, setFeedbackText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [selectedChip, setSelectedChip] = useState(null);
+
+  const handleSubmit = async () => {
+    if (!feedbackText.trim()) {
+      Alert.alert(
+        'Empty Feedback',
+        'Please write your feedback before submitting.',
+      );
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const response = await axios.post(
+        `${BASE_URL}/users/feedback`,
+        {
+          rating: rating,
+          suggestion: feedbackText.trim(),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      console.log('Feedback submitted successfully:', response.data);
+
+      Alert.alert(
+        'Thank You! 🎉',
+        'Your feedback has been submitted successfully. We appreciate your input!',
+        [{text: 'OK', onPress: () => navigation.navigate('HomeNavigataor')}],
+      );
+    } catch (err) {
+      console.error('Error submitting feedback:', err.message);
+
+      const message =
+        err?.message === 'Request timeout'
+          ? 'Server is taking too long to respond. Please check your connection and try again.'
+          : err?.response?.data?.message || err?.message || 'Failed to submit feedback. Please try again.';
+
+      Alert.alert('Submission Failed', message, [{text: 'OK'}]);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSkip = () => {
+    Alert.alert(
+      'Skip Feedback?',
+      'Are you sure you want to skip providing detailed feedback?',
+      [
+        {text: 'Cancel', style: 'cancel'},
+        {text: 'Skip', onPress: () => navigation.navigate('HomeNavigataor')},
+      ],
+    );
+  };
+
+  const handleChipPress = chip => {
+    if (submitting) return;
+    if (selectedChip === chip) {
+      setSelectedChip(null);
+      setFeedbackText('');
+      return;
+    }
+    setSelectedChip(chip);
+    setFeedbackText(`${chip}: `);
+  };
+
+  const chips = [
+    'App Performance',
+    'User Interface',
+    'Features',
+    'Bug Report',
+    'Suggestions',
+  ];
+
+  const isSubmitEnabled = feedbackText.trim().length > 0 && !submitting;
+
+  return (
+    <View style={styles.container}>
+      <StatusBar translucent={true} backgroundColor={'transparent'} />
+      <ImageBackground
+        source={require('../../../assets/vector_1.png')}
+        style={styles.vector}
+        resizeMode="stretch">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{flex: 1}}>
+          <ScrollView
+            contentContainerStyle={{flexGrow: 1}}
+            keyboardShouldPersistTaps="handled">
+            {/* Header */}
+            <View style={styles.header}>
+              <TouchableOpacity
+                onPress={() => navigation.goBack()}
+                disabled={submitting}>
+                <MaterialIcons
+                  name="arrow-back-ios"
+                  color={'#0D0D26'}
+                  size={25}
+                />
+              </TouchableOpacity>
+              <Text style={styles.headerText}>Feedback</Text>
+              <View style={{width: 25}} />
+            </View>
+
+            {/* Content */}
+            <View style={styles.content}>
+              {/* Rating Display */}
+              <View style={styles.ratingDisplay}>
+                <Text style={styles.ratingLabel}>Your Rating:</Text>
+                <View style={styles.starsContainer}>
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <Ionicons
+                      key={star}
+                      name={star <= rating ? 'star' : 'star-outline'}
+                      size={30}
+                      color={star <= rating ? '#FFD700' : '#E0E0E0'}
+                      style={{marginHorizontal: 2}}
+                    />
+                  ))}
+                </View>
+              </View>
+
+              {/* Suggestion Chips */}
+              <View style={styles.suggestionsSection}>
+                <Text style={styles.suggestionsTitle}>
+                  What would you like to tell us about?
+                </Text>
+                <View style={styles.suggestionChips}>
+                  {chips.map((chip, index) => {
+                    const isSelected = selectedChip === chip;
+                    return (
+                      <TouchableOpacity
+                        key={index}
+                        style={[
+                          styles.suggestionChip,
+                          isSelected && styles.suggestionChipSelected,
+                        ]}
+                        onPress={() => handleChipPress(chip)}
+                        disabled={submitting}
+                        activeOpacity={0.7}>
+                        <Text
+                          style={[
+                            styles.suggestionChipText,
+                            isSelected && styles.suggestionChipTextSelected,
+                          ]}>
+                          {chip}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Feedback Input */}
+              <View style={styles.feedbackSection}>
+                <Text style={styles.feedbackLabel}>
+                  Tell us more about your experience:
+                </Text>
+                <TextInput
+                  style={styles.feedbackInput}
+                  placeholder="Share your thoughts, suggestions, or report any issues..."
+                  placeholderTextColor="#999"
+                  multiline
+                  numberOfLines={8}
+                  textAlignVertical="top"
+                  value={feedbackText}
+                  onChangeText={text => {
+                    if (text.length <= 500) {
+                      setFeedbackText(text);
+                      if (
+                        selectedChip &&
+                        !text.startsWith(`${selectedChip}:`)
+                      ) {
+                        setSelectedChip(null);
+                      }
+                    }
+                  }}
+                  editable={!submitting}
+                />
+                <Text
+                  style={[
+                    styles.characterCount,
+                    feedbackText.length >= 500 && styles.characterCountLimit,
+                  ]}>
+                  {feedbackText.length}/500 characters
+                </Text>
+              </View>
+
+              {/* Action Buttons */}
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={styles.skipButton}
+                  onPress={handleSkip}
+                  disabled={submitting}
+                  activeOpacity={0.7}>
+                  <Text style={styles.skipButtonText}>Skip</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.submitButton,
+                    !isSubmitEnabled && styles.submitButtonDisabled,
+                  ]}
+                  onPress={handleSubmit}
+                  disabled={!isSubmitEnabled}
+                  activeOpacity={0.8}>
+                  {submitting ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.submitButtonText}>Submit Feedback</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </ImageBackground>
+    </View>
+  );
+};
+
+export default FeedbackText;
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#E6F3F5',
-    },
-    vector: {
-        flex: 1,
-        width: wp(100),
-        height: height,
-    },
-    reviewContainer: {
-        position: 'absolute',
-        width: wp(100),
-        height: hp(70),
-        backgroundColor: '#fff',
-        bottom: '0%',
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        elevation: 10,
-        padding: '5%',
-        justifyContent: 'space-evenly'
-    },
-    main: {
-        height: '90%',
-    },
-    textContainer: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    cancelMark : {
-        alignItems: 'flex-end',
-        justifyContent: 'center',
-    },
-    inputsContainer: {
-        borderWidth: 0.4,
-        width: '100%',
-        paddingHorizontal: '5%',
-        borderRadius: 10,
-        borderColor: '#99ABC6',
-    },
-    gettingStarted: {
-        backgroundColor: '#130160',
-        height: hp(6.5),
-        width: '100%',
-        borderRadius: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-        alignSelf: 'center',
-        marginVertical: '4%'
-    },
-})
+  container: {
+    flex: 1,
+    backgroundColor: '#E6F3F5',
+  },
+  vector: {
+    flex: 1,
+    width: wp(100),
+  },
+  header: {
+    width: wp(100),
+    height: hp(7),
+    marginTop: '10%',
+    paddingHorizontal: '5%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerText: {
+    fontFamily: 'Nunito-Bold',
+    fontSize: hp(3),
+    color: '#0D0140',
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: '5%',
+    paddingTop: '3%',
+  },
+  ratingDisplay: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  ratingLabel: {
+    fontFamily: 'Nunito-SemiBold',
+    fontSize: hp(2),
+    color: '#666',
+    marginBottom: 10,
+  },
+  starsContainer: {
+    flexDirection: 'row',
+  },
+  suggestionsSection: {
+    marginBottom: 16,
+  },
+  suggestionsTitle: {
+    fontFamily: 'Nunito-SemiBold',
+    fontSize: hp(1.8),
+    color: '#333',
+    marginBottom: 12,
+  },
+  suggestionChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  suggestionChip: {
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: '#E0E0E0',
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    marginRight: 10,
+    marginBottom: 10,
+    elevation: 1,
+  },
+  suggestionChipSelected: {
+    backgroundColor: '#130160',
+    borderColor: '#130160',
+    elevation: 3,
+  },
+  suggestionChipText: {
+    fontFamily: 'Nunito-SemiBold',
+    fontSize: hp(1.6),
+    color: '#130160',
+  },
+  suggestionChipTextSelected: {
+    color: '#fff',
+  },
+  feedbackSection: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  feedbackLabel: {
+    fontFamily: 'Nunito-Bold',
+    fontSize: hp(2),
+    color: '#000',
+    marginBottom: 15,
+  },
+  feedbackInput: {
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 10,
+    padding: 15,
+    fontSize: hp(1.9),
+    fontFamily: 'Nunito-Regular',
+    color: '#000',
+    minHeight: hp(18),
+    maxHeight: hp(25),
+  },
+  characterCount: {
+    fontFamily: 'Nunito-Regular',
+    fontSize: hp(1.5),
+    color: '#999',
+    textAlign: 'right',
+    marginTop: 8,
+  },
+  characterCountLimit: {
+    color: '#FF4444',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    marginBottom: 30,
+  },
+  skipButton: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 10,
+    paddingVertical: 15,
+    marginRight: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  skipButtonText: {
+    fontFamily: 'Nunito-Bold',
+    fontSize: hp(2),
+    color: '#666',
+  },
+  submitButton: {
+    flex: 2,
+    backgroundColor: '#130160',
+    borderRadius: 10,
+    paddingVertical: 15,
+    marginLeft: 10,
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#130160',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+  },
+  submitButtonDisabled: {
+    opacity: 0.45,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  submitButtonText: {
+    fontFamily: 'Nunito-Bold',
+    fontSize: hp(2),
+    color: '#fff',
+  },
+});

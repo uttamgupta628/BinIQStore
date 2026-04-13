@@ -20,7 +20,7 @@ import { useStripe } from "@stripe/stripe-react-native";
 import useStore from "../../store";
 
 // const BACKEND_URL = "https://biniq.onrender.com/api";
-const BACKEND_URL = "http://10.94.245.75:3001/api";
+const BACKEND_URL = "https://biniq.onrender.com/api";
 
 const GetVerified = () => {
   const navigation = useNavigation();

@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
 } from 'react-native';
 import React, {useState, useCallback} from 'react';
 import {
@@ -32,6 +31,10 @@ const NotificationScreen = () => {
   const [isLoading,  setIsLoading]  = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // ✅ Local read-state overlay — maps _id → true for optimistically marked items
+  // This lets the UI update instantly without waiting for a re-fetch
+  const [localReadIds, setLocalReadIds] = useState({});
+
   // ── Fetch on focus ─────────────────────────────────────────────────────────
   useFocusEffect(
     useCallback(() => {
@@ -43,6 +46,8 @@ const NotificationScreen = () => {
     try {
       setIsLoading(true);
       await fetchNotifications();
+      // Clear local overrides after a fresh fetch so server state is authoritative
+      setLocalReadIds({});
     } catch (e) {
       console.error('Fetch notifications error:', e.message);
     } finally {
@@ -58,30 +63,58 @@ const NotificationScreen = () => {
 
   // ── Mark as read ───────────────────────────────────────────────────────────
   const handleMarkAsRead = async (notification) => {
-    if (notification.read) return;
+    const id = notification._id || notification.id;
+
+    // Check effective read state (local override OR server state)
+    const alreadyRead = localReadIds[id] || notification.read;
+    if (alreadyRead) return;
+
+    // ✅ Optimistic update — mark read in local state immediately so UI reacts instantly
+    setLocalReadIds(prev => ({...prev, [id]: true}));
+
     try {
-      await markNotificationRead(notification._id);
-      // Re-fetch to update state
-      await fetchNotifications();
+      await markNotificationRead(id);
+      // Silent background re-fetch to sync server state; no loading spinner needed
+      fetchNotifications().then(() => setLocalReadIds({})).catch(() => {});
     } catch (e) {
       console.error('Mark as read error:', e.message);
+      // ✅ Rollback optimistic update on failure
+      setLocalReadIds(prev => {
+        const next = {...prev};
+        delete next[id];
+        return next;
+      });
     }
   };
 
   // ── Mark all as read ───────────────────────────────────────────────────────
   const handleMarkAllRead = async () => {
-    const unread = notifList.filter(n => !n.read);
+    const unread = notifList.filter(n => {
+      const id = n._id || n.id;
+      return !localReadIds[id] && !n.read;
+    });
     if (!unread.length) return;
+
+    // ✅ Optimistic — mark all unread as read locally at once
+    const newIds = {};
+    unread.forEach(n => { newIds[n._id || n.id] = true; });
+    setLocalReadIds(prev => ({...prev, ...newIds}));
+
     try {
-      await Promise.all(unread.map(n => markNotificationRead(n._id)));
-      await fetchNotifications();
+      await Promise.all(unread.map(n => markNotificationRead(n._id || n.id)));
+      fetchNotifications().then(() => setLocalReadIds({})).catch(() => {});
     } catch (e) {
       console.error('Mark all read error:', e.message);
+      // Rollback
+      setLocalReadIds(prev => {
+        const next = {...prev};
+        Object.keys(newIds).forEach(id => delete next[id]);
+        return next;
+      });
     }
   };
 
   // ── Normalize notifications from store ────────────────────────────────────
-  // store.notifications could be array or object with todays/yesturdays/olders
   const notifList = (() => {
     if (!notifications) return [];
     if (Array.isArray(notifications)) return notifications;
@@ -119,8 +152,13 @@ const NotificationScreen = () => {
   };
 
   const {todays, yesturdays, olders} = groupNotifications(sorted);
-  const isEmpty    = sorted.length === 0;
-  const unreadCount = sorted.filter(n => !n.read).length;
+  const isEmpty = sorted.length === 0;
+
+  // ✅ unreadCount respects local overrides too
+  const unreadCount = sorted.filter(n => {
+    const id = n._id || n.id;
+    return !localReadIds[id] && !n.read;
+  }).length;
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const formatTime = (time) => {
@@ -164,7 +202,10 @@ const NotificationScreen = () => {
   // ── Notification Item ──────────────────────────────────────────────────────
   const NotificationItem = ({notification}) => {
     const {icon, color} = getIconAndColor(notification);
-    const isUnread = !notification.read;
+    const id = notification._id || notification.id;
+
+    // ✅ Effective read state = local override OR server value
+    const isUnread = !localReadIds[id] && !notification.read;
 
     return (
       <TouchableOpacity

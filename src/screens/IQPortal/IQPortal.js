@@ -1,53 +1,214 @@
-import { Dimensions, Image, ImageBackground, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
-import React from 'react'
-import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen'
+import {
+  Dimensions,
+  Image,
+  ImageBackground,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  ActivityIndicator,
+  Linking,
+} from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { useNavigation } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');
 
-const SERVICES = [
-  "Verify My Bin Store $195.99 Annually",
-  "Scale your business: $185.00",
-  "Weekly live training: $50.00/Session",
-  "Bookkeeping/Taxes/Accounting Help: Price per request",
-  "Consulting: $500 per session",
-  "101 30 Day Mentorship Training Plan: $2,000.00",
-  "Direct Contact Holder Portal: $250.00",
-];
-
-const COURSES = [
-  {
-    title: "Start a Bin Store",
-    description: "How to start a bin store — Intro to reselling video",
-    meta: "Full Video • With PDF",
-  },
-  {
-    title: "Free Reseller Training",
-    description: "Resellers BluePrint Method",
-    meta: "1 Video • With PDF",
-  },
-  {
-    title: "Reseller BluePrint",
-    description: "How to Buy Pallets",
-    meta: "3 Videos • With PDF",
-  },
-  {
-    title: "Advanced Reselling",
-    description: "Scaling your bin store to the next level",
-    meta: "5 Videos • With PDF",
-  },
-];
+const wp = (percentage) => (width * percentage) / 100;
+const hp = (percentage) => (height * percentage) / 100;
 
 const IQPortal = () => {
   const navigation = useNavigation();
 
+  const [loading, setLoading]   = useState(false);
+  const [courses, setCourses]   = useState([]);
+  const [services, setServices] = useState([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchCoursesAndServices();
+    }, [])
+  );
+
+  const fetchCoursesAndServices = async () => {
+    try {
+      setLoading(true);
+
+      const mockCourses = [
+        {
+          id: '1',
+          title: 'How to Start a Bin Store',
+          description: 'Intro to reselling — full video with PDF guide',
+          image: require('../../../assets/reseller_training.png'),
+          duration: 'Full Video',
+          resources: 'With PDF',
+          price: 'Free',
+          category: 'Training',
+          url: 'https://www.biniq.net/products/how-to-start-a-bin-store',
+        },
+        {
+          id: '2',
+          title: 'Free Reseller Training',
+          description: 'Start your reselling journey for free',
+          image: require('../../../assets/reseller_training.png'),
+          duration: '1 Video',
+          resources: 'With PDF',
+          price: 'Free',
+          category: 'Training',
+          url: 'https://www.biniq.net/products/free-bin-reselling-training?variant=50225215701308',
+        },
+        {
+          id: '3',
+          title: 'MASTERMIND BLUEPRINT',
+          description: 'How to Make Money Reselling Fast',
+          image: require('../../../assets/reseller_training.png'),
+          duration: '3 Videos',
+          resources: 'With PDF',
+          price: '$49.99',
+          category: 'Advanced',
+          url: 'https://www.biniq.net/products/bin-reseller-blueprint',
+        },
+        {
+          id: '4',
+          title: 'How to Buy Pallets & Truckloads',
+          description: 'Buy pallets and truckloads directly',
+          image: require('../../../assets/reseller_training.png'),
+          duration: 'Full Training',
+          resources: 'With PDF',
+          price: '$99.99',
+          category: 'Advanced',
+          url: 'https://www.biniq.net/products/how-to-buy-pallets-and-truckloads-directly',
+        },
+      ];
+
+      const mockServices = [
+        {
+          id: '1',
+          title: 'Bookkeeping / Taxes / Accounting Help',
+          price: 'Price Per Request',
+          url: 'https://www.biniq.net/products/bookkeeping-taxes-accounting-help?variant=52941971915068',
+        },
+        // {
+        //   id: '2',
+        //   title: 'Consulting',
+        //   price: '$500 Per Session',
+        //   url: 'https://www.biniq.net/collections/training-and-resources',
+        // },
+        {
+          id: '3',
+          title: '101 30-Day Mentorship Training Plan',
+          price: '$2,000.00',
+          url: 'https://www.biniq.net/products/101-30-day-reselling-mentorship',
+        },
+        {
+          id: '4',
+          title: 'Direct Contract Holder Portal',
+          price: '$250.00',
+          url: 'https://www.biniq.net/products/direct-contract-holder-portal',
+        },
+      ];
+
+      setCourses(mockCourses);
+      setServices(mockServices);
+    } catch (err) {
+      console.error('Error fetching courses:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCoursePress = (course) => {
+    if (course.url) {
+      Linking.openURL(course.url);
+    }
+  };
+
+  const handleServicePress = (service) => {
+    if (service.url) {
+      Linking.openURL(service.url);
+    }
+  };
+
+  const handleViewAll = () => {
+    Linking.openURL('https://www.biniq.net/collections/training-and-resources');
+  };
+
+  // ── Course Card ──────────────────────────────────────────────
+  const CourseCard = ({ course, index }) => {
+    const isFirstRow = index < 2;
+    const cardHeight = isFirstRow ? hp(30) : hp(25);
+
+    return (
+      <TouchableOpacity
+        style={[styles.courseCard, { height: cardHeight }]}
+        onPress={() => handleCoursePress(course)}
+        activeOpacity={0.7}>
+        <Image
+          source={
+            course.image
+              ? typeof course.image === 'string'
+                ? { uri: course.image }
+                : course.image
+              : require('../../../assets/reseller_training.png')
+          }
+          style={styles.courseImage}
+        />
+        <View style={styles.courseContent}>
+          <Text style={styles.courseTitle} numberOfLines={2}>
+            {course.title}
+          </Text>
+          <Text style={styles.courseDescription} numberOfLines={2}>
+            {course.description}
+          </Text>
+          <Text style={styles.courseInfo}>
+            {course.duration} • {course.resources}
+          </Text>
+          {course.price !== 'Free' && (
+            <Text style={styles.coursePrice}>{course.price}</Text>
+          )}
+          {course.price === 'Free' && (
+            <Text style={styles.courseFree}>Free</Text>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  // ── Service Card ─────────────────────────────────────────────
+  const ServiceCard = ({ service }) => (
+    <TouchableOpacity
+      style={styles.serviceCard}
+      onPress={() => handleServicePress(service)}
+      activeOpacity={0.7}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.serviceTitle} numberOfLines={2}>
+          {service.title}
+        </Text>
+        <Text style={styles.servicePrice}>{service.price}</Text>
+      </View>
+      <MaterialIcons name="arrow-forward-ios" size={18} color="#524B6B" />
+    </TouchableOpacity>
+  );
+
+  const EmptyState = ({ message }) => (
+    <View style={styles.emptyContainer}>
+      <MaterialIcons name="school" size={60} color="#ccc" />
+      <Text style={styles.emptyText}>{message}</Text>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar translucent backgroundColor="transparent" />
-      <ImageBackground source={require('../../../assets/vector_1.png')} style={styles.vector}>
+      <ImageBackground
+        source={require('../../../assets/vector_1.png')}
+        style={styles.vector}>
 
-        {/* Header */}
+        {/* ── Header ── */}
         <View style={styles.header}>
           <View style={styles.headerChild}>
             <Pressable onPress={() => navigation.goBack()}>
@@ -57,49 +218,84 @@ const IQPortal = () => {
           </View>
         </View>
 
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-          <View style={{ paddingHorizontal: '5%' }}>
-
-            {/* ── Additional Services ─────────────────────── */}
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>ADDITIONAL SERVICES</Text>
-            </View>
-
-            {SERVICES.map((service, i) => (
-              <View key={i} style={styles.serviceRow}>
-                <Text style={styles.serviceText}>{service}</Text>
-              </View>
-            ))}
-
-            {/* ── Courses ─────────────────────────────────── */}
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Courses</Text>
-            </View>
-
-            {/* Grid: 2 columns */}
-            <View style={styles.courseGrid}>
-              {COURSES.map((course, i) => (
-                <Pressable
-                  key={i}
-                  style={styles.courseCard}
-                  onPress={() => navigation.navigate('CourseDetails')}
-                >
-                  <Image
-                    source={require('../../../assets/reseller_training.png')}
-                    style={styles.courseImage}
-                  />
-                  <View style={styles.courseInfo}>
-                    <Text style={styles.courseCategory}>{course.title}</Text>
-                    <Text style={styles.courseDescription}>{course.description}</Text>
-                    <Text style={styles.courseMeta}>{course.meta}</Text>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#130160" />
+            <Text style={styles.loadingText}>Loading courses...</Text>
           </View>
-          <View style={{ height: hp(5) }} />
-        </ScrollView>
+        ) : (
+          <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+
+            {/* ── View All Banner ── */}
+            <TouchableOpacity style={styles.viewAllBanner} onPress={handleViewAll} activeOpacity={0.85}>
+              <View>
+                <Text style={styles.viewAllBannerTitle}>Browse All Training</Text>
+                <Text style={styles.viewAllBannerSub}>View full collection of courses & resources</Text>
+              </View>
+              <View style={styles.viewAllBannerBtn}>
+                <Text style={styles.viewAllBannerBtnText}>View All</Text>
+                <MaterialIcons name="arrow-forward-ios" size={14} color="#fff" />
+              </View>
+            </TouchableOpacity>
+
+            {/* ── Courses Section ── */}
+            {courses.length > 0 ? (
+              <>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>TRAINING COURSES</Text>
+                </View>
+
+                {/* Row 1 */}
+                <View style={styles.coursesContainer}>
+                  <View style={styles.coursesRow}>
+                    {courses.slice(0, 2).map((course, index) => (
+                      <CourseCard key={course.id} course={course} index={index} />
+                    ))}
+                  </View>
+                </View>
+
+                {/* Row 2 */}
+                <View style={styles.coursesContainer}>
+                  <View style={styles.coursesRow}>
+                    {courses.slice(2, 4).map((course, index) => (
+                      <CourseCard key={course.id} course={course} index={index + 2} />
+                    ))}
+                  </View>
+                </View>
+
+                {/* Extra rows if any */}
+                {courses.length > 4 && (
+                  <View style={styles.coursesContainer}>
+                    <View style={styles.coursesRow}>
+                      {courses.slice(4).map((course, index) => (
+                        <CourseCard key={course.id} course={course} index={index + 4} />
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </>
+            ) : (
+              <EmptyState message="No courses available" />
+            )}
+
+            {/* ── Services Section ── */}
+            <View style={styles.servicesContainer}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>ADDITIONAL SERVICES</Text>
+              </View>
+
+              {services.length > 0 ? (
+                services.map(service => (
+                  <ServiceCard key={service.id} service={service} />
+                ))
+              ) : (
+                <EmptyState message="No services available" />
+              )}
+            </View>
+
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        )}
       </ImageBackground>
 
       <ImageBackground
@@ -113,45 +309,233 @@ const IQPortal = () => {
 export default IQPortal;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  vector: { width: wp(100), height: '100%' },
-  vector2: { width: wp(100), height: hp(50), position: 'absolute', bottom: 0, zIndex: -1 },
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  vector: {
+    width: wp(100),
+    height: '100%',
+  },
+  vector2: {
+    width: wp(100),
+    height: hp(50),
+    position: 'absolute',
+    bottom: 0,
+    zIndex: -1,
+  },
 
+  // ── Header ──
   header: {
-    width: wp(100), height: hp(7), marginTop: '10%',
-    paddingHorizontal: '5%', flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'space-between',
+    width: wp(100),
+    height: hp(7),
+    marginTop: '10%',
+    paddingHorizontal: '5%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  headerChild: { flexDirection: 'row', alignItems: 'center' },
+  headerChild: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   headerText: {
-    fontFamily: 'Nunito-Bold', fontSize: hp(2.9),
-    color: '#0D0140', marginLeft: '3%',
+    fontFamily: 'Nunito-Bold',
+    fontSize: hp(2.9),
+    color: '#0D0140',
+  },
+  scrollView: {
+    flex: 1,
+    width: '100%',
   },
 
-  sectionHeader: { marginTop: '7%', marginBottom: '4%' },
-  sectionTitle: { fontFamily: 'Nunito-Bold', color: '#130160', fontSize: hp(2.4) },
-
-  // Services
-  serviceRow: {
-    backgroundColor: '#fff', width: '100%', height: hp(6.5),
-    borderRadius: 5, justifyContent: 'center', paddingHorizontal: '5%',
-    elevation: 3, marginBottom: '3%',
+  // ── View All Banner ──
+  viewAllBanner: {
+    marginHorizontal: '5%',
+    marginTop: hp(2),
+    marginBottom: hp(1),
+    backgroundColor: '#130160',
+    borderRadius: 10,
+    paddingHorizontal: wp(5),
+    paddingVertical: hp(2),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
   },
-  serviceText: { color: '#524B6B', fontFamily: 'Nunito-SemiBold', fontSize: hp(1.9) },
+  viewAllBannerTitle: {
+    fontFamily: 'Nunito-Bold',
+    color: '#fff',
+    fontSize: hp(2),
+  },
+  viewAllBannerSub: {
+    fontFamily: 'Nunito-Regular',
+    color: '#ffffff99',
+    fontSize: hp(1.4),
+    marginTop: 2,
+  },
+  viewAllBannerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#14BA9C',
+    borderRadius: 6,
+    paddingHorizontal: wp(3),
+    paddingVertical: hp(0.8),
+    gap: 4,
+  },
+  viewAllBannerBtnText: {
+    fontFamily: 'Nunito-Bold',
+    color: '#fff',
+    fontSize: hp(1.6),
+  },
 
-  // Courses grid
-  courseGrid: {
-    flexDirection: 'row', flexWrap: 'wrap',
+  // ── Section Header ──
+  sectionHeaderRow: {
+    paddingHorizontal: '5%',
+    marginTop: hp(2),
+    marginBottom: hp(1),
+  },
+  sectionTitle: {
+    fontFamily: 'Nunito-Bold',
+    color: '#130160',
+    fontSize: hp(2.3),
+  },
+
+  // ── Loading / Empty ──
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 80,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontFamily: 'Nunito-Regular',
+    fontSize: hp(2),
+    color: '#666',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontFamily: 'Nunito-SemiBold',
+    fontSize: hp(2),
+    color: '#666',
+    marginTop: 15,
+  },
+
+  // ── Course Cards ──
+  coursesContainer: {
+    marginVertical: hp(0.8),
+    paddingHorizontal: '5%',
+  },
+  coursesRow: {
+    width: '100%',
+    flexDirection: 'row',
     justifyContent: 'space-between',
   },
   courseCard: {
-    width: wp(44), borderRadius: 5,
-    borderWidth: 0.5, borderColor: '#e6e6e6',
-    backgroundColor: '#fff', marginBottom: hp(2),
+    width: wp(44),
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: '#e6e6e6',
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    overflow: 'hidden',
   },
-  courseImage: { width: '100%', height: hp(13), borderTopLeftRadius: 5, borderTopRightRadius: 5 },
-  courseInfo: { padding: '6%' },
-  courseCategory: { fontFamily: 'Nunito-ExtraBold', color: '#0049AF', fontSize: hp(1.7) },
-  courseDescription: { fontFamily: 'Nunito-SemiBold', color: '#000', fontSize: hp(1.8), marginTop: '2%' },
-  courseMeta: { fontFamily: 'Nunito-SemiBold', color: '#14BA9C', fontSize: hp(1.5), marginTop: '5%' },
+  courseImage: {
+    width: wp(44),
+    height: hp(13),
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+  },
+  courseContent: {
+    padding: '5%',
+    alignItems: 'center',        // ← centers children horizontally
+  },
+  courseTitle: {
+    fontFamily: 'Nunito-ExtraBold',
+    color: '#0049AF',
+    fontSize: hp(1.6),
+    marginBottom: 4,
+    lineHeight: hp(2.1),
+    textAlign: 'center',         // ← centers text
+  },
+  courseDescription: {
+    fontFamily: 'Nunito-SemiBold',
+    color: '#524B6B',
+    fontSize: hp(1.5),
+    marginBottom: 6,
+    lineHeight: hp(2),
+    textAlign: 'center',         // ← centers text
+  },
+  courseInfo: {
+    fontFamily: 'Nunito-SemiBold',
+    color: '#14BA9C',
+    fontSize: hp(1.4),
+    textAlign: 'center',         // ← centers text
+  },
+  coursePrice: {
+    fontFamily: 'Nunito-Bold',
+    color: '#130160',
+    fontSize: hp(1.7),
+    marginTop: 5,
+    textAlign: 'center',         // ← centers text
+  },
+  courseFree: {
+    fontFamily: 'Nunito-Bold',
+    color: '#14BA9C',
+    fontSize: hp(1.6),
+    marginTop: 5,
+    textAlign: 'center',         // ← centers text
+  },
+
+  // ── Service Cards ──
+  servicesContainer: {
+    paddingHorizontal: '5%',
+    marginTop: hp(1),
+  },
+  serviceCard: {
+    backgroundColor: '#fff',
+    width: wp(90),
+    minHeight: hp(7),
+    borderRadius: 8,
+    paddingHorizontal: '5%',
+    paddingVertical: '3.5%',
+    elevation: 3,
+    marginBottom: hp(1.5),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    borderLeftWidth: 3,
+    borderLeftColor: '#130160',
+  },
+  serviceTitle: {
+    color: '#0D0140',
+    fontFamily: 'Nunito-SemiBold',
+    fontSize: hp(1.8),
+    lineHeight: hp(2.4),
+    marginBottom: 3,
+  },
+  servicePrice: {
+    color: '#14BA9C',
+    fontFamily: 'Nunito-Bold',
+    fontSize: hp(1.6),
+  },
 });

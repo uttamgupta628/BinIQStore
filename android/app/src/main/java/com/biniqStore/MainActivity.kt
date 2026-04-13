@@ -1,4 +1,4 @@
-package com.biniqStore
+package com.binIQstore
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

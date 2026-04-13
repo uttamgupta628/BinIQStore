@@ -1,5 +1,4 @@
 import {
-  Image,
   ImageBackground,
   Pressable,
   ScrollView,
@@ -18,6 +17,8 @@ import { useNavigation } from '@react-navigation/native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import axios from 'axios';
 import useStore from '../../store';
+
+const BASE_URL = 'https://biniq.onrender.com/api';
 
 const ChangePassword = () => {
   const navigation = useNavigation();
@@ -48,11 +49,10 @@ const ChangePassword = () => {
     setIsLoading(true);
     try {
       const response = await axios.post(
-        'https://api.biniq.net/api/users/change-password',
+        `${BASE_URL}/users/change-password`,
         {
-          current_password: currentPassword,
+          old_password: currentPassword,
           new_password: newPassword,
-          confirm_password: confirmPassword,
         },
         {
           headers: {
@@ -72,12 +72,12 @@ const ChangePassword = () => {
         console.error('Response data:', error.response.data);
         console.error('Response status:', error.response.status);
       }
-      const message =
+      const errMessage =
         error.response?.data?.message ||
-        Object.values(error.response?.data || {})?.[0]?.[0] ||
+        error.response?.data?.errors?.[0]?.msg ||
         error.message ||
         'Failed to change password';
-      Alert.alert('Error', message);
+      Alert.alert('Error', errMessage);
     } finally {
       setIsLoading(false);
     }
@@ -100,6 +100,7 @@ const ChangePassword = () => {
         </View>
 
         <View style={{ padding: '5%' }}>
+
           {/* Current Password */}
           <Text style={styles.label}>Current Password</Text>
           <View style={styles.inputContainer}>
@@ -113,8 +114,7 @@ const ChangePassword = () => {
             />
             <TouchableOpacity
               style={styles.eyeIcon}
-              onPress={() => setShowCurrent(!showCurrent)}
-            >
+              onPress={() => setShowCurrent(!showCurrent)}>
               <MaterialIcons
                 name={showCurrent ? 'visibility' : 'visibility-off'}
                 size={20}
@@ -136,8 +136,7 @@ const ChangePassword = () => {
             />
             <TouchableOpacity
               style={styles.eyeIcon}
-              onPress={() => setShowNew(!showNew)}
-            >
+              onPress={() => setShowNew(!showNew)}>
               <MaterialIcons
                 name={showNew ? 'visibility' : 'visibility-off'}
                 size={20}
@@ -159,8 +158,7 @@ const ChangePassword = () => {
             />
             <TouchableOpacity
               style={styles.eyeIcon}
-              onPress={() => setShowConfirm(!showConfirm)}
-            >
+              onPress={() => setShowConfirm(!showConfirm)}>
               <MaterialIcons
                 name={showConfirm ? 'visibility' : 'visibility-off'}
                 size={20}
@@ -168,21 +166,21 @@ const ChangePassword = () => {
               />
             </TouchableOpacity>
           </View>
+
         </View>
 
         <TouchableOpacity
           style={[styles.gettingStarted, isLoading && styles.disabledButton]}
           onPress={handleChangePassword}
-          disabled={isLoading}
-        >
+          disabled={isLoading}>
           {isLoading ? (
             <ActivityIndicator color='#fff' />
           ) : (
-            <Text style={{ fontFamily: 'Nunito-SemiBold', color: '#fff', fontSize: hp(2.5) }}>
-              Change Password
-            </Text>
+            <Text style={styles.btnText}>Change Password</Text>
           )}
         </TouchableOpacity>
+
+        <View style={{ height: hp(5) }} />
       </ImageBackground>
     </ScrollView>
   );
@@ -219,7 +217,7 @@ const styles = StyleSheet.create({
   vector: {
     flex: 1,
     width: wp(100),
-    height: hp(100),
+    minHeight: hp(100),
   },
   label: {
     color: 'black',
@@ -258,19 +256,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     alignSelf: 'center',
+    marginTop: hp(2),
   },
   disabledButton: {
     opacity: 0.6,
   },
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#C0C0C0',
-  },
-  text: {
-    marginHorizontal: 10,
-    fontSize: 16,
+  btnText: {
     fontFamily: 'Nunito-SemiBold',
-    color: '#A9A9A9',
+    color: '#fff',
+    fontSize: hp(2.5),
   },
 });

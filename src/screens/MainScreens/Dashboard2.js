@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ImageBackground,
   Pressable,
   Linking,
+  ActivityIndicator,
 } from "react-native";
 import {
   heightPercentageToDP as hp,
@@ -18,10 +19,6 @@ import useStore from "../../store";
 
 const PLACEHOLDER_STORE = require("../../../assets/store_profile.png");
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Social platform config — maps store field → icon asset
-// Only platforms where the store has a saved link will be rendered
-// ─────────────────────────────────────────────────────────────────────────────
 const SOCIAL_CONFIG = [
   { key: "facebook_link", icon: require("../../../assets/fb.png") },
   { key: "twitter_link", icon: require("../../../assets/x.png") },
@@ -30,6 +27,8 @@ const SOCIAL_CONFIG = [
   { key: "messenger_link", icon: require("../../../assets/messenger.png") },
   { key: "linkedin_link", icon: require("../../../assets/ln.png") },
 ];
+
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 const getDaysRemaining = (dateStr) => {
   if (!dateStr) return null;
@@ -43,16 +42,27 @@ const getDaysRemaining = (dateStr) => {
 const Dashboard2 = () => {
   const navigation = useNavigation();
 
-  const user = useStore((state) => state.user);
-  const store = useStore((state) => state.store);
-  const fetchStoreDetails = useStore((state) => state.fetchStoreDetails);
-  const fetchUserProfile = useStore((state) => state.fetchUserProfile);
+  const { fetchStoreDetails, fetchUserProfile, user } = useStore();
+  const [store, setStore] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Refresh on every screen focus
   useFocusEffect(
     useCallback(() => {
-      fetchStoreDetails();
-      fetchUserProfile();
+      const fetchData = async () => {
+        setIsLoading(true);
+        try {
+          const [storeData] = await Promise.all([
+            fetchStoreDetails(),
+            fetchUserProfile(),
+          ]);
+          if (storeData) setStore(storeData);
+        } catch (error) {
+          console.error("Dashboard2 fetch error:", error.message);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchData();
     }, []),
   );
 
@@ -63,7 +73,6 @@ const Dashboard2 = () => {
     return `${n}`;
   };
 
-  // ── Verified / expiry logic ──
   const isVerified =
     store?.verified === true ||
     user?.verified === true ||
@@ -76,7 +85,6 @@ const Dashboard2 = () => {
   const isExpired = daysLeft !== null && daysLeft < 0;
   const showGetVerifiedButton = !isVerified || isExpired;
 
-  // ── Social links — only render icons for platforms with a saved URL ──
   const activeSocialLinks = SOCIAL_CONFIG.filter((s) => store?.[s.key]?.trim());
 
   const handleSocialPress = (url) => {
@@ -85,8 +93,11 @@ const Dashboard2 = () => {
     Linking.openURL(fullUrl).catch(() => {});
   };
 
+  const activeDailyRates = DAYS.filter((day) => store?.daily_rates?.[day]);
+
   return (
     <View style={styles.container}>
+
       {/* ── Header ── */}
       <View style={styles.header}>
         <Text style={styles.greeting}>
@@ -98,118 +109,138 @@ const Dashboard2 = () => {
       </View>
 
       {/* ── Store Profile Card ── */}
-      <ImageBackground
-        source={require("../../../assets/hidden_find_dashboard.png")}
-        style={styles.cardsContainer}
-      >
-        {/* Left: Store Image */}
-        <View style={styles.leftColumn}>
-          <View style={styles.storeImageWrapper}>
-            <Image
-              source={
-                store?.store_image
-                  ? { uri: store.store_image }
-                  : PLACEHOLDER_STORE
-              }
-              style={styles.storeImage}
-              resizeMode="cover"
-            />
-          </View>
+      {isLoading ? (
+        <View style={styles.cardLoading}>
+          <ActivityIndicator size="large" color="#130160" />
         </View>
+      ) : !store ? (
+        <View style={styles.cardLoading}>
+          <Text style={styles.noStoreText}>No store data found.</Text>
+        </View>
+      ) : (
+        <ImageBackground
+          source={require("../../../assets/hidden_find_dashboard.png")}
+          style={styles.cardsContainer}
+          borderRadius={7}
+        >
+          {/* ── Top half: image + bio ── */}
+          <View style={styles.topRow}>
 
-        {/* Right: Store Info */}
-        <View style={styles.rightColumn}>
-          <View style={styles.infoContainer}>
-            {/* Store Name + Bluetick (only when verified and not expired) */}
-            <View style={styles.nameRow}>
-              <Text style={styles.storeName} numberOfLines={1}>
-                {store?.store_name || "Hidden Finds"}
-              </Text>
-              {isVerified && !isExpired && (
+            {/* Left: Store Image */}
+            <View style={styles.leftColumn}>
+              <View style={styles.storeImageWrapper}>
                 <Image
-                  source={require("../../../assets/bluetick.png")}
-                  style={styles.bluetick}
+                  source={
+                    store?.store_image
+                      ? { uri: store.store_image }
+                      : PLACEHOLDER_STORE
+                  }
+                  style={styles.storeImage}
+                  resizeMode="cover"
                 />
-              )}
-            </View>
-
-            {/* Stats */}
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>
-                  {formatCount(store?.followers)}
-                </Text>
-                <Text style={styles.statLabel}>Followers</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>
-                  {formatCount(store?.likes)}
-                </Text>
-                <Text style={styles.statLabel}>Likes</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>
-                  {formatCount(store?.views_count || store?.views || 0)}
-                </Text>
-                <Text style={styles.statLabel}>Viewers</Text>
               </View>
             </View>
 
-            {/* Website / Email */}
-            <View style={styles.infoRow}>
-              <Text style={styles.infoText} numberOfLines={1}>
-                {store?.website_url ||
-                  store?.store_email ||
-                  "www.hiddenfinds.com"}
-              </Text>
-            </View>
+            {/* Right: Store Info */}
+            <View style={styles.rightColumn}>
 
-            {/* Address */}
-            <View style={styles.infoRow}>
-              <Text style={styles.infoText} numberOfLines={1}>
-                {store?.address
-                  ? store.address.length > 30
-                    ? store.address.slice(0, 30) + "..."
-                    : store.address
-                  : "104, St. Plymoth, UK"}
-              </Text>
-            </View>
+              {/* Store Name + Bluetick */}
+              <View style={styles.nameRow}>
+                <Text style={styles.storeName} numberOfLines={1}>
+                  {store?.store_name || "Hidden Finds"}
+                </Text>
+                {isVerified && !isExpired && (
+                  <Image
+                    source={require("../../../assets/bluetick.png")}
+                    style={styles.bluetick}
+                  />
+                )}
+              </View>
 
-            {/* Edit Profile + Social Icons */}
-            <View style={styles.actionContainer}>
-              <TouchableOpacity
-                style={styles.editBtn}
-                onPress={() => navigation.navigate("EditProfileScreen")}
-              >
-                <Text style={styles.editBtnText}>Edit Profile</Text>
-              </TouchableOpacity>
-
-              {/* Dynamic social icons — only renders platforms with a saved URL.
-                  Tapping opens the link in the device browser. */}
-              {activeSocialLinks.length > 0 && (
-                <View style={styles.socialIcons}>
-                  {activeSocialLinks.map((social) => (
-                    <TouchableOpacity
-                      key={social.key}
-                      onPress={() => handleSocialPress(store[social.key])}
-                      activeOpacity={0.7}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    >
-                      <Image
-                        source={social.icon}
-                        style={styles.socialIcon}
-                        resizeMode="contain"
-                      />
-                    </TouchableOpacity>
-                  ))}
+              {/* Stats */}
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <Text style={styles.statNumber}>{formatCount(store?.followers)}</Text>
+                  <Text style={styles.statLabel}>Followers</Text>
                 </View>
-              )}
+                <View style={styles.statItem}>
+                  <Text style={styles.statNumber}>{formatCount(store?.likes)}</Text>
+                  <Text style={styles.statLabel}>Likes</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statNumber}>{formatCount(store?.views_count || store?.views || 0)}</Text>
+                  <Text style={styles.statLabel}>Viewers</Text>
+                </View>
+              </View>
+
+              {/* Address */}
+              <View style={styles.infoRow}>
+                <Text style={styles.infoIcon}>📍</Text>
+                <Text style={styles.infoText} numberOfLines={1}>
+                  {store?.address || "No address set"}
+                </Text>
+              </View>
+
+              {/* Phone */}
+              <View style={styles.infoRow}>
+                <Text style={styles.infoIcon}>📞</Text>
+                <Text style={styles.infoText} numberOfLines={1}>
+                  {store?.phone_number || "No phone set"}
+                </Text>
+              </View>
+
+              {/* Edit Profile + Social Icons */}
+              <View style={styles.actionContainer}>
+                <TouchableOpacity
+                  style={styles.editBtn}
+                  onPress={() => navigation.navigate("EditProfileScreen")}
+                >
+                  <Text style={styles.editBtnText}>Edit Profile</Text>
+                </TouchableOpacity>
+
+                {activeSocialLinks.length > 0 && (
+                  <View style={styles.socialIcons}>
+                    {activeSocialLinks.map((social) => (
+                      <TouchableOpacity
+                        key={social.key}
+                        onPress={() => handleSocialPress(store[social.key])}
+                        activeOpacity={0.7}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      >
+                        <Image
+                          source={social.icon}
+                          style={styles.socialIcon}
+                          resizeMode="contain"
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
             </View>
           </View>
-        </View>
-      </ImageBackground>
 
-      {/* ── Get Verified CTA (smart: shows only when needed, red if expired) ── */}
+          {/* ── Daily Rates — INSIDE the card, full width below top row ── */}
+          {activeDailyRates.length > 0 && (
+            <View style={styles.dailyRatesInCard}>
+              <View style={styles.dailyRatesDivider} />
+              <Text style={styles.dailyRatesTitleInCard}>💰 Daily Rates</Text>
+              <View style={styles.ratesGrid}>
+                {activeDailyRates.map((day) => (
+                  <View key={day} style={styles.rateCard}>
+                    <Text style={styles.rateDay}>{day.slice(0, 3)}</Text>
+                    <Text style={styles.rateValue}>{store.daily_rates[day]}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+        </ImageBackground>
+      )}
+
+      {/* ── Get Verified CTA ── */}
       {showGetVerifiedButton && (
         <View style={styles.enrollNowContainer}>
           <Pressable
@@ -225,12 +256,13 @@ const Dashboard2 = () => {
           </Pressable>
         </View>
       )}
+
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingVertical: 16 },
+  container: { flex: 1, paddingVertical: 0},
   header: { marginBottom: 12 },
   greeting: { fontSize: hp(2.4), fontFamily: "Nunito-Bold", color: "#000" },
   name: {
@@ -240,68 +272,100 @@ const styles = StyleSheet.create({
   },
   subtext: { fontSize: wp(3.5), color: "#000", fontFamily: "Nunito-Bold" },
 
-  // Fixed height card; overflow NOT hidden on rightColumn so icons aren't clipped
+  cardLoading: {
+    width: "100%",
+    height: hp(20),
+    borderRadius: 7,
+    backgroundColor: "#eee",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  noStoreText: {
+    fontFamily: "Nunito-Regular",
+    color: "#888",
+    fontSize: hp(1.8),
+  },
+
+  // Card grows to fit all content including daily rates
   cardsContainer: {
+    width: "100%",
+    borderRadius: 7,
+    paddingBottom: hp(1.5),
+  },
+
+  // Top half: image left + info right
+  topRow: {
     flexDirection: "row",
     width: "100%",
-    height: hp(35),
-    borderRadius: 7,
+    paddingVertical: hp(1.5),
   },
+
   leftColumn: {
-    width: "40%",
-    height: "100%",
+    width: "38%",
     justifyContent: "center",
     alignItems: "center",
   },
   storeImageWrapper: {
-    width: wp(30),
-    height: wp(30),
-    borderRadius: wp(15),
+    width: wp(28),
+    height: wp(28),
+    borderRadius: wp(14),
     overflow: "hidden",
   },
   storeImage: { width: "100%", height: "100%" },
+
   rightColumn: {
-    width: "60%",
-    height: "100%",
+    width: "62%",
     justifyContent: "center",
-    alignItems: "center",
+    paddingRight: wp(2),
   },
-  // height 85% (was 75%) — extra room for social icons row
-  infoContainer: { width: "97%", height: "85%", flexDirection: "column" },
 
   nameRow: {
-    height: "18%",
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: "2%",
-    width: "93%",
+    marginBottom: hp(0.5),
+    paddingRight: wp(2),
   },
   storeName: {
     fontFamily: "Roboto-SemiBold",
     color: "#14BA9C",
-    fontSize: hp(3),
+    fontSize: hp(2.6),
     flex: 1,
   },
-  bluetick: { width: wp(7), height: wp(7) },
+  bluetick: { width: wp(6), height: wp(6) },
 
-  statsRow: { height: "28%", flexDirection: "row" },
-  statItem: { width: "33%", paddingLeft: "1%", justifyContent: "center" },
+  statsRow: {
+    flexDirection: "row",
+    marginBottom: hp(0.8),
+  },
+  statItem: { width: "33%", paddingLeft: "1%" },
   statNumber: {
     fontFamily: "Roboto-ExtraBold",
     color: "#fff",
-    fontSize: hp(2.5),
+    fontSize: hp(2.2),
   },
-  statLabel: { fontFamily: "Roboto-Regular", color: "#fff", fontSize: hp(1.3) },
+  statLabel: {
+    fontFamily: "Roboto-Regular",
+    color: "#fff",
+    fontSize: hp(1.2),
+  },
 
-  infoRow: { height: "12%", justifyContent: "center" },
-  infoText: { fontFamily: "Roboto-Thin", color: "#fff", fontSize: hp(1.5) },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: hp(0.5),
+    paddingRight: wp(2),
+  },
+  infoIcon: { fontSize: hp(1.5), marginRight: 5 },
+  infoText: {
+    fontFamily: "Roboto-Thin",
+    color: "#fff",
+    fontSize: hp(1.45),
+    flex: 1,
+  },
 
-  // No fixed height — content sizes naturally, icons never cut off
   actionContainer: {
-    marginTop: hp(0.5),
-    justifyContent: "flex-start",
-    width: "85%",
+    marginTop: hp(0.8),
+    width: "88%",
   },
   editBtn: {
     width: "100%",
@@ -309,33 +373,76 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
+    borderRadius: 4,
   },
   editBtnText: {
     color: "#000",
     fontSize: hp(1.7),
     fontFamily: "DMSans-SemiBold",
   },
-
-  // Social row: wraps on small screens so nothing overflows
   socialIcons: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: hp(1),
+    marginTop: hp(0.8),
     gap: wp(2.5),
     flexWrap: "wrap",
   },
   socialIcon: { width: wp(5), height: wp(5) },
 
+  // ── Daily Rates inside card ──
+  dailyRatesInCard: {
+    width: "100%",
+    paddingHorizontal: wp(4),
+    paddingBottom: hp(1),
+  },
+  dailyRatesDivider: {
+    width: "100%",
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    marginBottom: hp(1),
+  },
+  dailyRatesTitleInCard: {
+    fontFamily: "Nunito-Bold",
+    fontSize: hp(1.8),
+    color: "#fff",
+    marginBottom: hp(1),
+  },
+  ratesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: wp(2),
+  },
+  rateCard: {
+    width: wp(18),
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 10,
+    paddingVertical: hp(0.8),
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  rateDay: {
+    fontFamily: "Nunito-Bold",
+    fontSize: hp(1),
+    color: "#fff",
+    marginBottom: 2,
+  },
+  rateValue: {
+    fontFamily: "Nunito-SemiBold",
+    fontSize: hp(1),
+    color: "#14BA9C",
+  },
+
   enrollNowContainer: {
     width: wp(95),
     alignSelf: "center",
-    justifyContent: "flex-start",
     alignItems: "center",
-    marginTop: hp(1),
+    marginTop: hp(0.8),
   },
   libButton: {
     width: "95%",
-    height: hp(3.5),
+    height: hp(3),
     borderRadius: 7,
     justifyContent: "center",
   },

@@ -16,6 +16,7 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  Modal,
 } from "react-native";
 import {
   heightPercentageToDP as hp,
@@ -35,8 +36,6 @@ const { width, height } = Dimensions.get("window");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SOCIAL MEDIA PLATFORM CONFIG
-// Each entry defines: key (matches DB field prefix), label, placeholder,
-// brand color, icon text, URL regex validator, and error message.
 // ─────────────────────────────────────────────────────────────────────────────
 const SOCIAL_PLATFORMS = [
   {
@@ -46,9 +45,7 @@ const SOCIAL_PLATFORMS = [
     color: "#1877F2",
     icon: "f",
     validate: (url) =>
-      /^https?:\/\/(www\.)?(facebook\.com|fb\.com|fb\.watch)\/.+/i.test(
-        url.trim(),
-      ),
+      /^https?:\/\/(www\.)?(facebook\.com|fb\.com|fb\.watch)\/.+/i.test(url.trim()),
     errorMsg: "Must be a valid Facebook URL (facebook.com or fb.com)",
   },
   {
@@ -78,14 +75,49 @@ const SOCIAL_PLATFORMS = [
     color: "#25D366",
     icon: "wa",
     validate: (url) =>
-      /^https?:\/\/(wa\.me\/\d+|(www\.)?whatsapp\.com\/(send|channel)\?.+|api\.whatsapp\.com\/.+)/i.test(
-        url.trim(),
-      ),
+      /^https?:\/\/(wa\.me\/\d+|(www\.)?whatsapp\.com\/(send|channel)\?.+|api\.whatsapp\.com\/.+)/i.test(url.trim()),
     errorMsg: "Must be a valid WhatsApp link (e.g. https://wa.me/1234567890)",
   },
 ];
 
 const getSocialPlatform = (key) => SOCIAL_PLATFORMS.find((p) => p.key === key);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DAILY RATES CONFIG
+// ─────────────────────────────────────────────────────────────────────────────
+const WEEK_DAYS = [
+  "Friday",
+  "Saturday",
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+];
+
+const PRICE_OPTIONS = [
+  { label: "$15.00", value: "15.00" },
+  { label: "$14.00", value: "14.00" },
+  { label: "$13.00", value: "13.00" },
+  { label: "$12.00", value: "12.00" },
+  { label: "$11.00", value: "11.00" },
+  { label: "$10.00", value: "10.00" },
+  { label: "$9.00",  value: "9.00"  },
+  { label: "$8.00",  value: "8.00"  },
+  { label: "$7.00",  value: "7.00"  },
+  { label: "$6.00",  value: "6.00"  },
+  { label: "$5.00",  value: "5.00"  },
+  { label: "$4.00",  value: "4.00"  },
+  { label: "$3.00",  value: "3.00"  },
+  { label: "$2.00",  value: "2.00"  },
+  { label: "$1.00",  value: "1.00"  },
+  { label: "$0.50",  value: "0.50"  },
+];
+
+const DEFAULT_DAILY_RATES = WEEK_DAYS.reduce((acc, day) => {
+  acc[day] = null;
+  return acc;
+}, {});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN SCREEN
@@ -100,65 +132,69 @@ export default function EditProfileScreen({ openDrawer }) {
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
+  // ── Rate picker modal ──
+  const [ratePickerVisible, setRatePickerVisible] = useState(false);
+  const [ratePickerDay, setRatePickerDay] = useState(null);
+
   // ── Loading states ──
   const [isLoading, setIsLoading] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   // ── Store fields ──
   const [valueStartDay, setValueStartDay] = useState("Monday");
-  const [valueEndDay, setValueEndDay] = useState("Sunday");
+  const [valueEndDay, setValueEndDay]     = useState("Sunday");
   const [valueStartTime, setValueStartTime] = useState(new Date());
-  const [valueEndTime, setValueEndTime] = useState(new Date());
-  const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
-  const [zipCode, setZipCode] = useState("");
-  const [country, setCountry] = useState("");
-  const [storeName, setStoreName] = useState("");
-  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [valueEndTime, setValueEndTime]     = useState(new Date());
+  const [address, setAddress]           = useState("");
+  const [city, setCity]                 = useState("");
+  const [state, setState]               = useState("");
+  const [zipCode, setZipCode]           = useState("");
+  const [country, setCountry]           = useState("");
+  const [storeName, setStoreName]       = useState("");
+  const [websiteUrl, setWebsiteUrl]     = useState("");
   const [googleMapsLink, setGoogleMapsLink] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [storeEmail, setStoreEmail] = useState("");
-  const [suggestions, setSuggestions] = useState([]);
-  const [hasStore, setHasStore] = useState(false);
+  const [phoneNumber, setPhoneNumber]   = useState("");
+  const [storeEmail, setStoreEmail]     = useState("");
+  const [suggestions, setSuggestions]   = useState([]);
+  const [hasStore, setHasStore]         = useState(false);
 
-  // ── Image state ──
-  // storeImageUrl: Cloudinary URL persisted to DB
-  // storeImageLocal: local URI shown as preview
-  const [storeImageUrl, setStoreImageUrl] = useState(null);
+  // ── Daily rates ──
+  const [dailyRates, setDailyRates] = useState(DEFAULT_DAILY_RATES);
+
+  // ── Profile image state ──
+  const [storeImageUrl, setStoreImageUrl]     = useState(null);
   const [storeImageLocal, setStoreImageLocal] = useState(null);
-  const storeImageUrlRef = useRef(null); // avoids stale closure in handleSave
-  const imageManuallyChangedRef = useRef(false); // prevents useEffect from overwriting new pick
+  const storeImageUrlRef          = useRef(null);
+  const imageManuallyChangedRef   = useRef(false);
+
+  // ── Gallery / multiple images state ──
+  const [storeImages, setStoreImages]         = useState([]);
+  const [uploadingIndexes, setUploadingIndexes] = useState([]);
 
   // ── Social media links ──
-  const [facebookLink, setFacebookLink] = useState("");
+  const [facebookLink, setFacebookLink]   = useState("");
   const [instagramLink, setInstagramLink] = useState("");
-  const [twitterLink, setTwitterLink] = useState("");
-  const [whatsappLink, setWhatsappLink] = useState("");
+  const [twitterLink, setTwitterLink]     = useState("");
+  const [whatsappLink, setWhatsappLink]   = useState("");
 
-  // Social link map — keyed by platform key for easy lookup
   const socialLinkMap = {
-    facebook: { value: facebookLink, set: setFacebookLink },
+    facebook:  { value: facebookLink,  set: setFacebookLink  },
     instagram: { value: instagramLink, set: setInstagramLink },
-    twitter: { value: twitterLink, set: setTwitterLink },
-    whatsapp: { value: whatsappLink, set: setWhatsappLink },
+    twitter:   { value: twitterLink,   set: setTwitterLink   },
+    whatsapp:  { value: whatsappLink,  set: setWhatsappLink  },
   };
 
-  // Which platform input rows are currently shown
-  // Pre-populate from DB values on load (handled in useEffect below)
   const [activeSocialKeys, setActiveSocialKeys] = useState([]);
-
-  // Per-field social URL validation errors
-  const [socialErrors, setSocialErrors] = useState({});
+  const [socialErrors, setSocialErrors]         = useState({});
 
   const [days] = useState([
-    { label: "Monday", value: "Monday" },
-    { label: "Tuesday", value: "Tuesday" },
+    { label: "Monday",    value: "Monday"    },
+    { label: "Tuesday",   value: "Tuesday"   },
     { label: "Wednesday", value: "Wednesday" },
-    { label: "Thursday", value: "Thursday" },
-    { label: "Friday", value: "Friday" },
-    { label: "Saturday", value: "Saturday" },
-    { label: "Sunday", value: "Sunday" },
+    { label: "Thursday",  value: "Thursday"  },
+    { label: "Friday",    value: "Friday"    },
+    { label: "Saturday",  value: "Saturday"  },
+    { label: "Sunday",    value: "Sunday"    },
   ]);
 
   const API_KEY = "AIzaSyCY-8_-SbCN29nphT9QFtbzWV5H3asJQ4Q";
@@ -171,10 +207,7 @@ export default function EditProfileScreen({ openDrawer }) {
       setIsLoading(true);
       try {
         const store = await fetchStoreDetails();
-        if (!store) {
-          setHasStore(false);
-          return;
-        }
+        if (!store) { setHasStore(false); return; }
 
         setHasStore(true);
         setStoreName(store.store_name || "");
@@ -188,38 +221,41 @@ export default function EditProfileScreen({ openDrawer }) {
         setPhoneNumber(store.phone_number || "");
         setStoreEmail(store.store_email || "");
 
-        // ── Social links from DB ──
         setFacebookLink(store.facebook_link || "");
         setInstagramLink(store.instagram_link || "");
         setTwitterLink(store.twitter_link || "");
         setWhatsappLink(store.whatsapp_link || "");
 
-        // Show input rows for platforms that already have a saved value
-        const preLoaded = SOCIAL_PLATFORMS.filter((p) =>
-          store[`${p.key}_link`]?.trim(),
-        ).map((p) => p.key);
+        const preLoaded = SOCIAL_PLATFORMS
+          .filter((p) => store[`${p.key}_link`]?.trim())
+          .map((p) => p.key);
         setActiveSocialKeys(preLoaded);
 
-        // ── Store image ──
         if (!imageManuallyChangedRef.current) {
           setStoreImageUrl(store.store_image || null);
           storeImageUrlRef.current = store.store_image || null;
           setStoreImageLocal(store.store_image || null);
         }
 
-        // ── Working days ──
+        if (store.store_images && Array.isArray(store.store_images)) {
+          setStoreImages(store.store_images);
+        }
+
+        if (store.daily_rates && typeof store.daily_rates === "object") {
+          setDailyRates((prev) => ({ ...prev, ...store.daily_rates }));
+        }
+
         if (store.working_days) {
           const parts = store.working_days.split(" - ");
           setValueStartDay(parts[0] || "Monday");
           setValueEndDay(parts[1] || "Sunday");
         }
 
-        // ── Working time ──
         if (store.working_time) {
           const parts = store.working_time.split(" - ");
           if (parts.length === 2) {
             const startMatch = parts[0].match(/(\d+):(\d+)/);
-            const endMatch = parts[1].match(/(\d+):(\d+)/);
+            const endMatch   = parts[1].match(/(\d+):(\d+)/);
             if (startMatch) {
               const t = new Date();
               t.setHours(parseInt(startMatch[1]), parseInt(startMatch[2]));
@@ -242,7 +278,29 @@ export default function EditProfileScreen({ openDrawer }) {
     loadStoreDetails();
   }, [accessToken]);
 
-  // ─── Image picker ────────────────────────────────────────────────────────────
+  // ─── Daily rate modal helpers ────────────────────────────────────────────────
+  const openRatePicker = (day) => {
+    setRatePickerDay(day);
+    setRatePickerVisible(true);
+  };
+
+  const closeRatePicker = () => {
+    setRatePickerVisible(false);
+    setRatePickerDay(null);
+  };
+
+  const selectRate = (value) => {
+    if (ratePickerDay) {
+      setDailyRates((prev) => ({ ...prev, [ratePickerDay]: value }));
+    }
+    closeRatePicker();
+  };
+
+  const setDayRate = (day, value) => {
+    setDailyRates((prev) => ({ ...prev, [day]: value }));
+  };
+
+  // ─── Profile image picker ────────────────────────────────────────────────────
   const handlePickStoreImage = () => {
     Alert.alert(
       "Store Image",
@@ -284,20 +342,14 @@ export default function EditProfileScreen({ openDrawer }) {
     setStoreImageLocal(asset.uri);
     setIsUploadingImage(true);
     try {
-      const cloudinaryUrl = await uploadImageToCloudinary(
-        imageFile,
-        "biniq/stores",
-      );
+      const cloudinaryUrl = await uploadImageToCloudinary(imageFile, "biniq/stores");
       setStoreImageUrl(cloudinaryUrl);
       storeImageUrlRef.current = cloudinaryUrl;
       imageManuallyChangedRef.current = true;
-      console.log("Store image uploaded:", cloudinaryUrl);
 
-      // Auto-save image immediately so it's never lost
       if (hasStore) {
         try {
           await saveStoreDetails({ store_image: cloudinaryUrl }, true);
-          console.log("store_image auto-saved to DB:", cloudinaryUrl);
         } catch (autoSaveError) {
           console.error("Auto-save store_image failed:", autoSaveError.message);
         }
@@ -311,21 +363,100 @@ export default function EditProfileScreen({ openDrawer }) {
     }
   };
 
-  // ─── Address autocomplete ────────────────────────────────────────────────────
-  const fetchSuggestions = async (input) => {
-    if (!input) {
-      setSuggestions([]);
+  // ─── Gallery image picker ────────────────────────────────────────────────────
+  const handlePickAdditionalImages = () => {
+    if (storeImages.length >= 10) {
+      Alert.alert("Limit reached", "You can upload up to 10 store images.");
       return;
     }
-    const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
-      input,
-    )}&key=${API_KEY}`;
+    Alert.alert(
+      "Add Store Photo",
+      "Choose an option",
+      [
+        {
+          text: "Camera",
+          onPress: () =>
+            launchCamera(
+              { mediaType: "photo", maxWidth: 1200, maxHeight: 1200 },
+              (response) => handleAdditionalImageResponse(response),
+            ),
+        },
+        {
+          text: "Gallery",
+          onPress: () =>
+            launchImageLibrary(
+              {
+                mediaType: "photo",
+                maxWidth: 1200,
+                maxHeight: 1200,
+                selectionLimit: 10 - storeImages.length,
+              },
+              (response) => handleAdditionalImageResponse(response),
+            ),
+        },
+        { text: "Cancel", style: "cancel" },
+      ],
+      { cancelable: true },
+    );
+  };
+
+  const handleAdditionalImageResponse = async (response) => {
+    if (response.didCancel || response.errorCode) return;
+    if (!response.assets || !response.assets.length) return;
+
+    const assets = response.assets.slice(0, 10 - storeImages.length);
+    const startIndex = storeImages.length;
+    const placeholderIndexes = assets.map((_, i) => startIndex + i);
+
+    setUploadingIndexes((prev) => [...prev, ...placeholderIndexes]);
+    setStoreImages((prev) => [...prev, ...assets.map((a) => a.uri)]);
+
+    const uploadedUrls = await Promise.all(
+      assets.map(async (asset, i) => {
+        try {
+          const imageFile = {
+            uri: asset.uri,
+            fileName: asset.fileName || `store_gallery_${Date.now()}_${i}.jpg`,
+            type: asset.type || "image/jpeg",
+          };
+          return await uploadImageToCloudinary(imageFile, "biniq/stores");
+        } catch (err) {
+          console.error("Gallery image upload failed:", err.message);
+          return null;
+        }
+      }),
+    );
+
+    setStoreImages((prev) => {
+      const updated = [...prev];
+      placeholderIndexes.forEach((idx, i) => { updated[idx] = uploadedUrls[i] ?? null; });
+      return updated.filter(Boolean);
+    });
+
+    setUploadingIndexes((prev) =>
+      prev.filter((idx) => !placeholderIndexes.includes(idx)),
+    );
+  };
+
+  const handleRemoveAdditionalImage = (index) => {
+    Alert.alert("Remove Photo", "Are you sure you want to remove this photo?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => setStoreImages((prev) => prev.filter((_, i) => i !== index)),
+      },
+    ]);
+  };
+
+  // ─── Address autocomplete ────────────────────────────────────────────────────
+  const fetchSuggestions = async (input) => {
+    if (!input) { setSuggestions([]); return; }
+    const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&key=${API_KEY}`;
     try {
       const response = await axios.get(url);
-      const data = response.data;
-      setSuggestions(data.status === "OK" ? data.predictions : []);
+      setSuggestions(response.data.status === "OK" ? response.data.predictions : []);
     } catch (error) {
-      console.error("Error fetching suggestions:", error);
       setSuggestions([]);
     }
   };
@@ -343,42 +474,32 @@ export default function EditProfileScreen({ openDrawer }) {
   };
 
   const geocodeAddress = async (addr) => {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
-      addr,
-    )}&key=${API_KEY}`;
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addr)}&key=${API_KEY}`;
     try {
       const response = await axios.get(url);
-      const data = response.data;
-      if (data.results.length > 0) {
-        const components = data.results[0].address_components;
-        let city = "",
-          state = "",
-          zipCode = "",
-          country = "";
+      if (response.data.results.length > 0) {
+        const components = response.data.results[0].address_components;
+        let city = "", state = "", zipCode = "", country = "";
         components.forEach((c) => {
           if (c.types.includes("locality")) city = c.long_name;
-          if (c.types.includes("administrative_area_level_1"))
-            state = c.long_name;
+          if (c.types.includes("administrative_area_level_1")) state = c.long_name;
           if (c.types.includes("postal_code")) zipCode = c.long_name;
           if (c.types.includes("country")) country = c.long_name;
         });
         return { city, state, zipCode, country };
       }
       return null;
-    } catch (error) {
-      console.error("Error geocoding address:", error);
-      return null;
-    }
+    } catch { return null; }
   };
 
-  // ─── Dropdown helpers ────────────────────────────────────────────────────────
+  // ─── Dropdown helpers (Working Days) ────────────────────────────────────────
   const handleOpenDropdown = (setOpen, isOpen, key) => {
     if (isOpen) {
       setOpen(false);
     } else {
       setOpen(true);
       if (key !== "startDay") setOpenStartDay(false);
-      if (key !== "endDay") setOpenEndDay(false);
+      if (key !== "endDay")   setOpenEndDay(false);
     }
   };
 
@@ -391,57 +512,39 @@ export default function EditProfileScreen({ openDrawer }) {
     date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   // ─── Social media helpers ────────────────────────────────────────────────────
-  const handleSocialAdd = (key) => {
-    setActiveSocialKeys((prev) => [...prev, key]);
-  };
+  const handleSocialAdd    = (key) => setActiveSocialKeys((prev) => [...prev, key]);
 
   const handleSocialRemove = (key) => {
     socialLinkMap[key].set("");
     setActiveSocialKeys((prev) => prev.filter((k) => k !== key));
-    setSocialErrors((prev) => {
-      const e = { ...prev };
-      delete e[key];
-      return e;
-    });
+    setSocialErrors((prev) => { const e = { ...prev }; delete e[key]; return e; });
   };
 
   const handleSocialChange = (key, text) => {
     socialLinkMap[key].set(text);
-    // Clear error as user types
     if (socialErrors[key]) {
-      setSocialErrors((prev) => {
-        const e = { ...prev };
-        delete e[key];
-        return e;
-      });
+      setSocialErrors((prev) => { const e = { ...prev }; delete e[key]; return e; });
     }
   };
 
   const handleSocialBlur = (key) => {
     const { value } = socialLinkMap[key];
-    if (!value.trim()) return; // empty = optional, no error
+    if (!value.trim()) return;
     const platform = getSocialPlatform(key);
     if (!platform.validate(value)) {
       setSocialErrors((prev) => ({ ...prev, [key]: platform.errorMsg }));
     } else {
-      setSocialErrors((prev) => {
-        const e = { ...prev };
-        delete e[key];
-        return e;
-      });
+      setSocialErrors((prev) => { const e = { ...prev }; delete e[key]; return e; });
     }
   };
 
-  // Validate all active social links — returns true if all pass
   const validateAllSocialLinks = () => {
     const newErrors = {};
     activeSocialKeys.forEach((key) => {
       const { value } = socialLinkMap[key];
-      if (!value.trim()) return; // optional
+      if (!value.trim()) return;
       const platform = getSocialPlatform(key);
-      if (!platform.validate(value)) {
-        newErrors[key] = platform.errorMsg;
-      }
+      if (!platform.validate(value)) newErrors[key] = platform.errorMsg;
     });
     setSocialErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -454,10 +557,13 @@ export default function EditProfileScreen({ openDrawer }) {
       return;
     }
     if (isUploadingImage) {
-      Alert.alert("Please wait", "Image is still uploading...");
+      Alert.alert("Please wait", "Profile image is still uploading...");
       return;
     }
-    // Validate social links before saving
+    if (uploadingIndexes.length > 0) {
+      Alert.alert("Please wait", "Gallery photos are still uploading...");
+      return;
+    }
     if (!validateAllSocialLinks()) {
       Alert.alert(
         "Invalid Social Links",
@@ -469,44 +575,32 @@ export default function EditProfileScreen({ openDrawer }) {
     setIsLoading(true);
     try {
       const currentImageUrl = storeImageUrlRef.current;
-      console.log("Saving with store_image:", currentImageUrl);
 
       const storeData = {
-        store_name: storeName.trim(),
+        store_name:      storeName.trim(),
         address,
         city,
         state,
-        zip_code: zipCode,
+        zip_code:        zipCode,
         country,
         google_maps_link: googleMapsLink,
-        website_url: websiteUrl,
-        working_days: `${valueStartDay} - ${valueEndDay}`,
-        working_time: `${formatTime(valueStartTime)} - ${formatTime(
-          valueEndTime,
-        )}`,
-        phone_number: phoneNumber,
-        store_email: storeEmail,
-        // ── Social links: save value if active, otherwise null ──
-        facebook_link: activeSocialKeys.includes("facebook")
-          ? facebookLink || null
-          : null,
-        instagram_link: activeSocialKeys.includes("instagram")
-          ? instagramLink || null
-          : null,
-        twitter_link: activeSocialKeys.includes("twitter")
-          ? twitterLink || null
-          : null,
-        whatsapp_link: activeSocialKeys.includes("whatsapp")
-          ? whatsappLink || null
-          : null,
-        // ── Image ──
-        store_image: currentImageUrl || null,
+        website_url:     websiteUrl,
+        working_days:    `${valueStartDay} - ${valueEndDay}`,
+        working_time:    `${formatTime(valueStartTime)} - ${formatTime(valueEndTime)}`,
+        phone_number:    phoneNumber,
+        store_email:     storeEmail,
+        facebook_link:   activeSocialKeys.includes("facebook")  ? facebookLink  || null : null,
+        instagram_link:  activeSocialKeys.includes("instagram") ? instagramLink || null : null,
+        twitter_link:    activeSocialKeys.includes("twitter")   ? twitterLink   || null : null,
+        whatsapp_link:   activeSocialKeys.includes("whatsapp")  ? whatsappLink  || null : null,
+        store_image:     currentImageUrl || null,
+        store_images:    storeImages,
+        daily_rates:     dailyRates,
       };
 
       const response = await saveStoreDetails(storeData, hasStore);
       console.log("Save response:", response);
 
-      // Re-fetch so Zustand cache and image state are in sync
       imageManuallyChangedRef.current = false;
       const updatedStore = await fetchStoreDetails();
       if (updatedStore?.store_image) {
@@ -514,21 +608,17 @@ export default function EditProfileScreen({ openDrawer }) {
         storeImageUrlRef.current = updatedStore.store_image;
         setStoreImageLocal(updatedStore.store_image);
       }
+      if (updatedStore?.store_images && Array.isArray(updatedStore.store_images)) {
+        setStoreImages(updatedStore.store_images);
+      }
 
-      Alert.alert(
-        "Success",
-        hasStore
-          ? "Store updated successfully!"
-          : "Store created successfully!",
-      );
+      Alert.alert("Success", hasStore ? "Store updated successfully!" : "Store created successfully!");
       setHasStore(true);
     } catch (error) {
       console.error("Save error:", error.message);
       Alert.alert(
         "Error",
-        error.response?.data?.message ||
-          error.message ||
-          "Failed to save store details.",
+        error.response?.data?.message || error.message || "Failed to save store details.",
       );
     } finally {
       setIsLoading(false);
@@ -544,14 +634,17 @@ export default function EditProfileScreen({ openDrawer }) {
     );
   }
 
-  // Platforms not yet added (available to add)
   const availableSocialPlatforms = SOCIAL_PLATFORMS.filter(
     (p) => !activeSocialKeys.includes(p.key),
   );
 
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      nestedScrollEnabled
+      keyboardShouldPersistTaps="handled"
+    >
       <StatusBar translucent backgroundColor="transparent" />
       <ImageBackground
         source={require("../../../assets/vector_1.png")}
@@ -571,8 +664,7 @@ export default function EditProfileScreen({ openDrawer }) {
         {!hasStore && (
           <View style={styles.infoBanner}>
             <Text style={styles.infoBannerText}>
-              You don't have a store yet. Fill in the details below to create
-              one.
+              You don't have a store yet. Fill in the details below to create one.
             </Text>
           </View>
         )}
@@ -597,10 +689,7 @@ export default function EditProfileScreen({ openDrawer }) {
               </View>
             )}
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.editBtn}
-            onPress={handlePickStoreImage}
-          >
+          <TouchableOpacity style={styles.editBtn} onPress={handlePickStoreImage}>
             <EditImage width={wp(3)} />
           </TouchableOpacity>
           <Text style={styles.changePhotoText}>
@@ -630,10 +719,7 @@ export default function EditProfileScreen({ openDrawer }) {
             <TextInput
               placeholder="Enter your complete store address"
               value={address}
-              onChangeText={(text) => {
-                setAddress(text);
-                fetchSuggestions(text);
-              }}
+              onChangeText={(text) => { setAddress(text); fetchSuggestions(text); }}
               style={styles.input}
               placeholderTextColor="gray"
             />
@@ -648,9 +734,7 @@ export default function EditProfileScreen({ openDrawer }) {
                     style={styles.suggestionItem}
                     onPress={() => handleSelectSuggestion(item)}
                   >
-                    <Text style={styles.suggestionText}>
-                      {item.description}
-                    </Text>
+                    <Text style={styles.suggestionText}>{item.description}</Text>
                   </TouchableOpacity>
                 )}
                 style={styles.suggestionList}
@@ -662,25 +746,13 @@ export default function EditProfileScreen({ openDrawer }) {
             <View style={styles.inputContainerHalf}>
               <Text style={styles.label}>City</Text>
               <View style={styles.inputContainer}>
-                <TextInput
-                  placeholder="City"
-                  value={city}
-                  onChangeText={setCity}
-                  style={styles.input}
-                  placeholderTextColor="#999"
-                />
+                <TextInput placeholder="City" value={city} onChangeText={setCity} style={styles.input} placeholderTextColor="#999" />
               </View>
             </View>
             <View style={styles.inputContainerHalf}>
               <Text style={styles.label}>State</Text>
               <View style={styles.inputContainer}>
-                <TextInput
-                  placeholder="State"
-                  value={state}
-                  onChangeText={setState}
-                  style={styles.input}
-                  placeholderTextColor="#999"
-                />
+                <TextInput placeholder="State" value={state} onChangeText={setState} style={styles.input} placeholderTextColor="#999" />
               </View>
             </View>
           </View>
@@ -689,50 +761,79 @@ export default function EditProfileScreen({ openDrawer }) {
             <View style={styles.inputContainerHalf}>
               <Text style={styles.label}>Zip Code</Text>
               <View style={styles.inputContainer}>
-                <TextInput
-                  placeholder="Zip Code"
-                  value={zipCode}
-                  onChangeText={setZipCode}
-                  style={styles.input}
-                  placeholderTextColor="#999"
-                />
+                <TextInput placeholder="Zip Code" value={zipCode} onChangeText={setZipCode} style={styles.input} placeholderTextColor="#999" />
               </View>
             </View>
             <View style={styles.inputContainerHalf}>
               <Text style={styles.label}>Country</Text>
               <View style={styles.inputContainer}>
-                <TextInput
-                  placeholder="Country"
-                  value={country}
-                  onChangeText={setCountry}
-                  style={styles.input}
-                  placeholderTextColor="#999"
-                />
+                <TextInput placeholder="Country" value={country} onChangeText={setCountry} style={styles.input} placeholderTextColor="#999" />
               </View>
             </View>
           </View>
 
           <Text style={styles.label}>Google Maps Link</Text>
           <View style={styles.inputContainer}>
-            <TextInput
-              placeholder="Google Maps Link"
-              value={googleMapsLink}
-              onChangeText={setGoogleMapsLink}
-              style={styles.input}
-              placeholderTextColor="gray"
-            />
+            <TextInput placeholder="Google Maps Link" value={googleMapsLink} onChangeText={setGoogleMapsLink} style={styles.input} placeholderTextColor="gray" />
           </View>
 
           <Text style={styles.label}>Website URL</Text>
           <View style={styles.inputContainer}>
-            <TextInput
-              placeholder="Add website URL"
-              value={websiteUrl}
-              onChangeText={setWebsiteUrl}
-              style={styles.input}
-              placeholderTextColor="gray"
-            />
+            <TextInput placeholder="Add website URL" value={websiteUrl} onChangeText={setWebsiteUrl} style={styles.input} placeholderTextColor="gray" />
           </View>
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* ════════════════════════════════════════
+            STORE GALLERY
+        ════════════════════════════════════════ */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Store Gallery</Text>
+          <Text style={styles.socialSubtitle}>
+            Add up to 10 photos of your store (optional)
+          </Text>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.galleryScroll}
+            contentContainerStyle={styles.galleryScrollContent}
+            nestedScrollEnabled
+          >
+            {storeImages.map((uri, index) => (
+              <View key={`gallery-${index}`} style={styles.galleryThumb}>
+                <Image source={{ uri }} style={styles.galleryThumbImage} resizeMode="cover" />
+                {uploadingIndexes.includes(index) ? (
+                  <View style={styles.galleryThumbOverlay}>
+                    <ActivityIndicator color="#fff" size="small" />
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.galleryThumbRemove}
+                    onPress={() => handleRemoveAdditionalImage(index)}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <Text style={styles.galleryThumbRemoveText}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+
+            {storeImages.length < 10 && (
+              <TouchableOpacity
+                style={styles.galleryAddBtn}
+                onPress={handlePickAdditionalImages}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.galleryAddBtnIcon}>＋</Text>
+                <Text style={styles.galleryAddBtnText}>
+                  {storeImages.length === 0 ? "Add Photos" : "Add More"}
+                </Text>
+                <Text style={styles.galleryAddBtnCount}>{storeImages.length}/10</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
         </View>
 
         <View style={styles.divider} />
@@ -750,17 +851,13 @@ export default function EditProfileScreen({ openDrawer }) {
                 open={openStartDay}
                 value={valueStartDay}
                 items={days}
-                setOpen={() =>
-                  handleOpenDropdown(setOpenStartDay, openStartDay, "startDay")
-                }
+                setOpen={() => handleOpenDropdown(setOpenStartDay, openStartDay, "startDay")}
                 setValue={setValueStartDay}
                 placeholder="Start Day"
                 style={styles.dropdown}
                 textStyle={styles.dropdownText}
                 dropDownContainerStyle={styles.dropdownContainerStyle}
-                ArrowDownIconComponent={() => (
-                  <SimpleLineIcons name="arrow-down" size={20} color="#000" />
-                )}
+                ArrowDownIconComponent={() => <SimpleLineIcons name="arrow-down" size={20} color="#000" />}
                 onSelectItem={() => setOpenStartDay(false)}
               />
             </View>
@@ -769,17 +866,13 @@ export default function EditProfileScreen({ openDrawer }) {
                 open={openEndDay}
                 value={valueEndDay}
                 items={days}
-                setOpen={() =>
-                  handleOpenDropdown(setOpenEndDay, openEndDay, "endDay")
-                }
+                setOpen={() => handleOpenDropdown(setOpenEndDay, openEndDay, "endDay")}
                 setValue={setValueEndDay}
                 placeholder="End Day"
                 style={styles.dropdown}
                 textStyle={styles.dropdownText}
                 dropDownContainerStyle={styles.dropdownContainerStyle}
-                ArrowDownIconComponent={() => (
-                  <SimpleLineIcons name="arrow-down" size={20} color="#000" />
-                )}
+                ArrowDownIconComponent={() => <SimpleLineIcons name="arrow-down" size={20} color="#000" />}
                 onSelectItem={() => setOpenEndDay(false)}
               />
             </View>
@@ -787,21 +880,11 @@ export default function EditProfileScreen({ openDrawer }) {
 
           <Text style={styles.label}>Working Time</Text>
           <View style={styles.dropdownRow}>
-            <TouchableOpacity
-              style={styles.timePickerButton}
-              onPress={() => setShowStartTimePicker(true)}
-            >
-              <Text style={styles.timePickerText}>
-                {formatTime(valueStartTime)}
-              </Text>
+            <TouchableOpacity style={styles.timePickerButton} onPress={() => setShowStartTimePicker(true)}>
+              <Text style={styles.timePickerText}>{formatTime(valueStartTime)}</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.timePickerButton}
-              onPress={() => setShowEndTimePicker(true)}
-            >
-              <Text style={styles.timePickerText}>
-                {formatTime(valueEndTime)}
-              </Text>
+            <TouchableOpacity style={styles.timePickerButton} onPress={() => setShowEndTimePicker(true)}>
+              <Text style={styles.timePickerText}>{formatTime(valueEndTime)}</Text>
             </TouchableOpacity>
           </View>
           {showStartTimePicker && (
@@ -810,12 +893,7 @@ export default function EditProfileScreen({ openDrawer }) {
               mode="time"
               display="default"
               onChange={(event, date) =>
-                handleTimeChange(
-                  event,
-                  date,
-                  setValueStartTime,
-                  setShowStartTimePicker,
-                )
+                handleTimeChange(event, date, setValueStartTime, setShowStartTimePicker)
               }
             />
           )}
@@ -825,36 +903,73 @@ export default function EditProfileScreen({ openDrawer }) {
               mode="time"
               display="default"
               onChange={(event, date) =>
-                handleTimeChange(
-                  event,
-                  date,
-                  setValueEndTime,
-                  setShowEndTimePicker,
-                )
+                handleTimeChange(event, date, setValueEndTime, setShowEndTimePicker)
               }
             />
           )}
 
           <Text style={styles.label}>Phone Number</Text>
           <View style={styles.inputContainer}>
-            <TextInput
-              placeholder="+97 23342234244"
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              style={styles.input}
-              placeholderTextColor="gray"
-            />
+            <TextInput placeholder="+97 23342234244" value={phoneNumber} onChangeText={setPhoneNumber} style={styles.input} placeholderTextColor="gray" />
           </View>
 
           <Text style={styles.label}>Store Email</Text>
           <View style={styles.inputContainer}>
-            <TextInput
-              placeholder="Enter your store email"
-              value={storeEmail}
-              onChangeText={setStoreEmail}
-              style={styles.input}
-              placeholderTextColor="gray"
-            />
+            <TextInput placeholder="Enter your store email" value={storeEmail} onChangeText={setStoreEmail} style={styles.input} placeholderTextColor="gray" />
+          </View>
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* ════════════════════════════════════════
+            DAILY RATES
+        ════════════════════════════════════════ */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Daily Rates</Text>
+          <Text style={styles.socialSubtitle}>
+            Set an entry rate for each day of the week (optional)
+          </Text>
+
+          <View style={styles.dailyRatesContainer}>
+            {WEEK_DAYS.map((day) => (
+              <View key={day} style={styles.rateRow}>
+                {/* Day label */}
+                <View style={styles.rateDayLabel}>
+                  <Text style={styles.rateDayText}>{day}</Text>
+                </View>
+
+                {/* Tappable selector — opens the modal */}
+                <TouchableOpacity
+                  style={styles.rateSelector}
+                  onPress={() => openRatePicker(day)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={
+                      dailyRates[day]
+                        ? styles.rateSelectorValue
+                        : styles.rateSelectorPlaceholder
+                    }
+                  >
+                    {dailyRates[day]
+                      ? `$${parseFloat(dailyRates[day]).toFixed(2)}`
+                      : "Select rate"}
+                  </Text>
+                  <SimpleLineIcons name="arrow-down" size={14} color="#524B6B" />
+                </TouchableOpacity>
+
+                {/* Clear button */}
+                {dailyRates[day] !== null && (
+                  <TouchableOpacity
+                    style={styles.rateClearBtn}
+                    onPress={() => setDayRate(day, null)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={styles.rateClearBtnText}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
           </View>
         </View>
 
@@ -862,9 +977,6 @@ export default function EditProfileScreen({ openDrawer }) {
 
         {/* ════════════════════════════════════════
             SOCIAL MEDIA LINKS
-            — optional, select which platforms to add
-            — per-platform URL validation on blur
-            — values saved to DB on Save
         ════════════════════════════════════════ */}
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Social Media Links</Text>
@@ -872,32 +984,17 @@ export default function EditProfileScreen({ openDrawer }) {
             Add links to your store's social profiles (optional)
           </Text>
 
-          {/* Active platform rows */}
           {activeSocialKeys.map((key) => {
             const platform = getSocialPlatform(key);
             const { value } = socialLinkMap[key];
             const hasError = !!socialErrors[key];
-
             return (
               <View key={key} style={styles.socialLinkBlock}>
                 <View style={styles.socialLinkRow}>
-                  {/* Coloured brand badge */}
-                  <View
-                    style={[
-                      styles.socialBadge,
-                      { backgroundColor: platform.color },
-                    ]}
-                  >
+                  <View style={[styles.socialBadge, { backgroundColor: platform.color }]}>
                     <Text style={styles.socialBadgeText}>{platform.icon}</Text>
                   </View>
-
-                  {/* URL input */}
-                  <View
-                    style={[
-                      styles.socialInputWrapper,
-                      hasError && styles.socialInputError,
-                    ]}
-                  >
+                  <View style={[styles.socialInputWrapper, hasError && styles.socialInputError]}>
                     <TextInput
                       style={styles.socialInput}
                       placeholder={platform.placeholder}
@@ -910,8 +1007,6 @@ export default function EditProfileScreen({ openDrawer }) {
                       keyboardType="url"
                     />
                   </View>
-
-                  {/* Remove button */}
                   <TouchableOpacity
                     style={styles.socialRemoveBtn}
                     onPress={() => handleSocialRemove(key)}
@@ -920,47 +1015,27 @@ export default function EditProfileScreen({ openDrawer }) {
                     <Text style={styles.socialRemoveBtnText}>✕</Text>
                   </TouchableOpacity>
                 </View>
-
-                {/* Inline validation error */}
                 {hasError && (
-                  <Text style={styles.socialErrorText}>
-                    {socialErrors[key]}
-                  </Text>
+                  <Text style={styles.socialErrorText}>{socialErrors[key]}</Text>
                 )}
               </View>
             );
           })}
 
-          {/* Add platform buttons — only shown for platforms not yet added */}
           {availableSocialPlatforms.length > 0 && (
             <View style={styles.socialAddSection}>
               <Text style={styles.socialAddLabel}>
-                {activeSocialKeys.length === 0
-                  ? "Select a platform to add:"
-                  : "Add another:"}
+                {activeSocialKeys.length === 0 ? "Select a platform to add:" : "Add another:"}
               </Text>
               <View style={styles.socialAddButtons}>
                 {availableSocialPlatforms.map((platform) => (
                   <TouchableOpacity
                     key={platform.key}
-                    style={[
-                      styles.socialAddBtn,
-                      { borderColor: platform.color },
-                    ]}
+                    style={[styles.socialAddBtn, { borderColor: platform.color }]}
                     onPress={() => handleSocialAdd(platform.key)}
                   >
-                    <View
-                      style={[
-                        styles.socialAddBtnDot,
-                        { backgroundColor: platform.color },
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.socialAddBtnText,
-                        { color: platform.color },
-                      ]}
-                    >
+                    <View style={[styles.socialAddBtnDot, { backgroundColor: platform.color }]} />
+                    <Text style={[styles.socialAddBtnText, { color: platform.color }]}>
                       {platform.label}
                     </Text>
                   </TouchableOpacity>
@@ -976,10 +1051,10 @@ export default function EditProfileScreen({ openDrawer }) {
         <TouchableOpacity
           style={[
             styles.gettingStarted,
-            (isLoading || isUploadingImage) && styles.disabledButton,
+            (isLoading || isUploadingImage || uploadingIndexes.length > 0) && styles.disabledButton,
           ]}
           onPress={handleSave}
-          disabled={isLoading || isUploadingImage}
+          disabled={isLoading || isUploadingImage || uploadingIndexes.length > 0}
         >
           {isLoading ? (
             <ActivityIndicator color="#fff" />
@@ -996,6 +1071,77 @@ export default function EditProfileScreen({ openDrawer }) {
         source={require("../../../assets/vector_2.png")}
         style={styles.vector2}
       />
+
+      {/* ════════════════════════════════════════
+          RATE PICKER BOTTOM-SHEET MODAL
+          Rendered outside ImageBackground so it
+          covers the full screen correctly.
+      ════════════════════════════════════════ */}
+      <Modal
+        visible={ratePickerVisible}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={closeRatePicker}
+      >
+        {/* Semi-transparent backdrop — tap to dismiss */}
+        <TouchableOpacity
+          style={styles.rateModalBackdrop}
+          activeOpacity={1}
+          onPress={closeRatePicker}
+        >
+          {/* The sheet itself — stop touch propagation so taps inside don't close */}
+          <TouchableOpacity activeOpacity={1} style={styles.rateModalSheet}>
+            {/* Header */}
+            <View style={styles.rateModalHeader}>
+              <View style={styles.rateModalHandleBar} />
+              <View style={styles.rateModalTitleRow}>
+                <Text style={styles.rateModalTitle}>
+                  {ratePickerDay ? `${ratePickerDay} Rate` : "Select Rate"}
+                </Text>
+                <TouchableOpacity onPress={closeRatePicker} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <MaterialIcons name="close" size={22} color="#555" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Scrollable options list */}
+            <FlatList
+              data={PRICE_OPTIONS}
+              keyExtractor={(item) => item.value}
+              showsVerticalScrollIndicator={false}
+              bounces
+              contentContainerStyle={styles.rateModalList}
+              renderItem={({ item }) => {
+                const isSelected =
+                  ratePickerDay && dailyRates[ratePickerDay] === item.value;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.rateOption,
+                      isSelected && styles.rateOptionSelected,
+                    ]}
+                    onPress={() => selectRate(item.value)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.rateOptionText,
+                        isSelected && styles.rateOptionTextSelected,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                    {isSelected && (
+                      <MaterialIcons name="check-circle" size={22} color="#130160" />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </ScrollView>
   );
 }
@@ -1013,6 +1159,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: -1,
   },
+
+  // ── Header ──
   header: {
     width: wp(100),
     height: hp(7),
@@ -1026,10 +1174,11 @@ const styles = StyleSheet.create({
   headerText: {
     fontFamily: "Nunito-Bold",
     fontSize: hp(3.2),
-    textAlign: "left",
     color: "#0D0140",
     marginLeft: "3%",
   },
+
+  // ── Banner ──
   infoBanner: {
     backgroundColor: "#FFF3CD",
     borderRadius: 8,
@@ -1042,6 +1191,8 @@ const styles = StyleSheet.create({
     fontSize: hp(1.8),
     color: "#856404",
   },
+
+  // ── Profile image ──
   profileSection: {
     alignItems: "center",
     justifyContent: "center",
@@ -1051,10 +1202,7 @@ const styles = StyleSheet.create({
   profilePicture: { width: wp(26), height: wp(26), borderRadius: wp(13) },
   uploadingOverlay: {
     position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
     borderRadius: wp(13),
     backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "center",
@@ -1079,6 +1227,8 @@ const styles = StyleSheet.create({
     color: "#524B6B",
     marginTop: hp(0.8),
   },
+
+  // ── Section ──
   sectionContainer: { padding: "5%" },
   sectionTitle: {
     fontFamily: "Nunito-SemiBold",
@@ -1092,6 +1242,8 @@ const styles = StyleSheet.create({
     fontSize: hp(1.8),
     marginTop: "1.5%",
   },
+
+  // ── Inputs ──
   inputContainer: {
     backgroundColor: "#fff",
     width: "100%",
@@ -1111,6 +1263,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginVertical: "2%",
   },
+
+  // ── Working days dropdowns ──
   dropdownRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1133,6 +1287,8 @@ const styles = StyleSheet.create({
   },
   dropdownText: { fontFamily: "Nunito-Regular", fontSize: 16, color: "#000" },
   dropdownContainerStyle: { borderColor: "#524B6B", backgroundColor: "#fff" },
+
+  // ── Time picker ──
   timePickerButton: {
     backgroundColor: "#fff",
     width: "48%",
@@ -1144,6 +1300,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   timePickerText: { fontFamily: "Nunito-Regular", fontSize: 16, color: "#000" },
+
+  // ── Divider ──
   divider: {
     borderWidth: 0.3,
     borderColor: "#C4C4C4",
@@ -1151,6 +1309,8 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     marginTop: "6%",
   },
+
+  // ── Save button ──
   gettingStarted: {
     backgroundColor: "#130160",
     width: "90%",
@@ -1168,6 +1328,8 @@ const styles = StyleSheet.create({
     fontSize: hp(2.5),
   },
   bottomSpacer: { height: hp(7) },
+
+  // ── Address suggestions ──
   suggestionsContainer: {
     width: "100%",
     backgroundColor: "#fff",
@@ -1178,15 +1340,195 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
   suggestionList: { width: "100%" },
-  suggestionItem: {
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
+  suggestionItem: { padding: 10, borderBottomWidth: 1, borderBottomColor: "#ddd" },
+  suggestionText: { fontFamily: "Nunito-Regular", fontSize: hp(1.8), color: "#000" },
+
+  // ── Gallery ──
+  galleryScroll: { marginTop: hp(0.5) },
+  galleryScrollContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: hp(1),
+    paddingRight: wp(5),
   },
-  suggestionText: {
+  galleryThumb: {
+    width: wp(22),
+    height: wp(22),
+    borderRadius: 10,
+    marginRight: wp(3),
+    overflow: "visible",
+  },
+  galleryThumbImage: {
+    width: wp(22),
+    height: wp(22),
+    borderRadius: 10,
+    backgroundColor: "#f0f0f0",
+  },
+  galleryThumbOverlay: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: 10,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  galleryThumbRemove: {
+    position: "absolute",
+    top: -wp(2.5),
+    right: -wp(2.5),
+    width: wp(6),
+    height: wp(6),
+    borderRadius: wp(3),
+    backgroundColor: "#E53935",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 2,
+  },
+  galleryThumbRemoveText: { color: "#fff", fontSize: hp(1.4), fontFamily: "Nunito-Bold" },
+  galleryAddBtn: {
+    width: wp(22),
+    height: wp(22),
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#130160",
+    borderStyle: "dashed",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F5F4FF",
+  },
+  galleryAddBtnIcon: { fontSize: hp(3), color: "#130160", lineHeight: hp(3.5) },
+  galleryAddBtnText: {
+    fontFamily: "Nunito-SemiBold",
+    fontSize: hp(1.5),
+    color: "#130160",
+    marginTop: hp(0.3),
+  },
+  galleryAddBtnCount: {
+    fontFamily: "Nunito-Regular",
+    fontSize: hp(1.3),
+    color: "#888",
+    marginTop: hp(0.2),
+  },
+
+  // ── Daily Rates rows ──
+  dailyRatesContainer: { marginBottom: hp(1) },
+  rateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: hp(1.8),
+    minHeight: hp(6.5),
+  },
+  rateDayLabel: { width: wp(26), paddingRight: wp(2) },
+  rateDayText: {
+    fontFamily: "Nunito-SemiBold",
+    fontSize: hp(1.9),
+    color: "#0D0140",
+  },
+  rateSelector: {
+    flex: 1,
+    height: hp(5.8),
+    borderWidth: 0.4,
+    borderColor: "#524B6B",
+    borderRadius: 8,
+    paddingHorizontal: wp(3),
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#fff",
+  },
+  rateSelectorValue: {
     fontFamily: "Nunito-Regular",
     fontSize: hp(1.8),
     color: "#000",
+  },
+  rateSelectorPlaceholder: {
+    fontFamily: "Nunito-Regular",
+    fontSize: hp(1.8),
+    color: "#999",
+  },
+  rateClearBtn: {
+    marginLeft: wp(2.5),
+    width: wp(8),
+    height: wp(8),
+    borderRadius: wp(4),
+    backgroundColor: "#f0f0f0",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 0.5,
+    borderColor: "#ddd",
+  },
+  rateClearBtnText: {
+    fontSize: hp(1.6),
+    color: "#666",
+    fontFamily: "Nunito-Bold",
+  },
+
+  // ── Rate Picker Modal ──
+  rateModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  rateModalSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: hp(60),
+    paddingBottom: Platform.OS === "ios" ? hp(4) : hp(2),
+  },
+  rateModalHeader: {
+    alignItems: "center",
+    paddingTop: hp(1.2),
+    paddingBottom: hp(0.5),
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#E8E8E8",
+  },
+  rateModalHandleBar: {
+    width: wp(10),
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#D0D0D0",
+    marginBottom: hp(1.2),
+  },
+  rateModalTitleRow: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: wp(5),
+    paddingBottom: hp(1),
+  },
+  rateModalTitle: {
+    fontFamily: "Nunito-Bold",
+    fontSize: hp(2.2),
+    color: "#0D0140",
+  },
+  rateModalList: {
+    paddingTop: hp(0.5),
+    paddingBottom: hp(1),
+  },
+  rateOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: wp(5),
+    paddingVertical: hp(1.8),
+    borderBottomWidth: 0.3,
+    borderBottomColor: "#F0F0F0",
+  },
+  rateOptionSelected: { backgroundColor: "#F0EEFF" },
+  rateOptionText: {
+    fontFamily: "Nunito-Regular",
+    fontSize: hp(2),
+    color: "#333",
+  },
+  rateOptionTextSelected: {
+    fontFamily: "Nunito-SemiBold",
+    color: "#130160",
   },
 
   // ── Social media ──
@@ -1194,12 +1536,10 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito-Regular",
     fontSize: hp(1.7),
     color: "#777",
-    marginTop: -hp(2), // pull up under title
+    marginTop: -hp(2),
     marginBottom: hp(2),
   },
-  socialLinkBlock: {
-    marginBottom: hp(0.5),
-  },
+  socialLinkBlock: { marginBottom: hp(0.5) },
   socialLinkRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1213,11 +1553,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: wp(2),
   },
-  socialBadgeText: {
-    color: "#fff",
-    fontFamily: "Nunito-Bold",
-    fontSize: hp(1.6),
-  },
+  socialBadgeText: { color: "#fff", fontFamily: "Nunito-Bold", fontSize: hp(1.6) },
   socialInputWrapper: {
     flex: 1,
     height: hp(6),
@@ -1228,15 +1564,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#fff",
   },
-  socialInputError: {
-    borderColor: "#E53935",
-    borderWidth: 1,
-  },
-  socialInput: {
-    fontFamily: "Nunito-Regular",
-    fontSize: hp(1.8),
-    color: "#000",
-  },
+  socialInputError: { borderColor: "#E53935", borderWidth: 1 },
+  socialInput: { fontFamily: "Nunito-Regular", fontSize: hp(1.8), color: "#000" },
   socialRemoveBtn: {
     marginLeft: wp(2),
     width: wp(7),
@@ -1246,30 +1575,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  socialRemoveBtnText: {
-    fontSize: hp(1.5),
-    color: "#555",
-  },
+  socialRemoveBtnText: { fontSize: hp(1.5), color: "#555" },
   socialErrorText: {
     fontFamily: "Nunito-Regular",
     fontSize: hp(1.5),
     color: "#E53935",
-    marginLeft: wp(11), // align under input (badge width + gap)
+    marginLeft: wp(11),
     marginBottom: hp(0.8),
   },
-  socialAddSection: {
-    marginTop: hp(1.5),
-  },
+  socialAddSection: { marginTop: hp(1.5) },
   socialAddLabel: {
     fontFamily: "Nunito-SemiBold",
     fontSize: hp(1.7),
     color: "#524B6B",
     marginBottom: hp(1),
   },
-  socialAddButtons: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
+  socialAddButtons: { flexDirection: "row", flexWrap: "wrap" },
   socialAddBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1287,8 +1608,5 @@ const styles = StyleSheet.create({
     borderRadius: wp(1),
     marginRight: wp(1.5),
   },
-  socialAddBtnText: {
-    fontFamily: "Nunito-SemiBold",
-    fontSize: hp(1.7),
-  },
+  socialAddBtnText: { fontFamily: "Nunito-SemiBold", fontSize: hp(1.7) },
 });

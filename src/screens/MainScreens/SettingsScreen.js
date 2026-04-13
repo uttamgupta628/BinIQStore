@@ -1,5 +1,5 @@
-import { useNavigation } from "@react-navigation/native"
-import React from "react"
+// src/screens/SettingsScreen.js
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,165 +7,169 @@ import {
   Switch,
   TouchableOpacity,
   ImageBackground,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   Dimensions,
-  Pressable
-} from "react-native"
-import { heightPercentageToDP as hp, widthPercentageToDP as wp } from "react-native-responsive-screen"
-import Ionicons from "react-native-vector-icons/Ionicons"
-import MaterialIcons from "react-native-vector-icons/MaterialIcons"
-import ProfileIcon from '../../../assets/ProfileIcon';
-import NotificationIcon from '../../../assets/NotificationIcon'
-import ChangePasswordIcon from '../../../assets/ChangePasswordIcon'
-import LanguageIcon from '../../../assets/LanguageIcon'
-import ThemeIcon from '../../../assets/ThemeIcon'
-import DeleteIcon from '../../../assets/DeleteIcon'
-import PrivacyIcon from '../../../assets/PrivacyIcon'
-import TermsAndConditionIcon from '../../../assets/TermsAndConditionIcon'
-import HelpCenterIcon from '../../../assets/HelpCenterIcon'
-import SupportIcon from '../../../assets/SupportIcon'
-import AboutIcon from '../../../assets/AboutIcon'
+  Pressable,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
+import { heightPercentageToDP as hp, widthPercentageToDP as wp } from 'react-native-responsive-screen';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useNavigation } from '@react-navigation/native';
+import axios from 'axios';
+import useStore from '../../store';
 
+const { width, height } = Dimensions.get('window');
+const BASE_URL = 'https://biniq.onrender.com/api';
 
-const { width, height } = Dimensions.get('window')
-export default function SettingsScreen({ openDrawer }) {
-  const [isEnabled, setIsEnabled] = React.useState(false)
-  const toggleSwitch = () => setIsEnabled(previousState => !previousState)
+export default function SettingsScreen() {
   const navigation = useNavigation();
+  const { accessToken, logout } = useStore();
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This action is permanent and cannot be undone. All your data will be deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeletingAccount(true);
+            try {
+              await axios.delete(`${BASE_URL}/users/delete-account`, {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json',
+                },
+              });
+              logout();
+              navigation.replace('Login');
+            } catch (error) {
+              const message =
+                error.response?.data?.message ||
+                error.message ||
+                'Failed to delete account. Please try again.';
+              Alert.alert('Error', message);
+            } finally {
+              setIsDeletingAccount(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const SettingRow = ({ icon, label, onPress, right, danger = false }) => (
+    <TouchableOpacity
+      style={styles.settingItem}
+      onPress={onPress}
+      activeOpacity={onPress ? 0.7 : 1}
+      disabled={!onPress && !right}
+    >
+      <View style={styles.settingLeft}>
+        <View style={[styles.iconBox, danger && styles.iconBoxDanger]}>
+          <Ionicons
+            name={icon}
+            size={hp(2.5)}
+            color={danger ? '#e74c3c' : '#130160'}
+          />
+        </View>
+        <Text style={[styles.settingText, danger && styles.settingTextDanger]}>
+          {label}
+        </Text>
+      </View>
+      {right || (
+        onPress ? (
+          <Ionicons name="chevron-forward" size={hp(2.5)} color="#ccc" />
+        ) : null
+      )}
+    </TouchableOpacity>
+  );
 
   return (
     <ScrollView style={styles.container}>
-      <StatusBar translucent={true} backgroundColor={'transparent'} />
-      <ImageBackground source={require('../../../assets/vector_1.png')} style={styles.vector}>
+      <StatusBar translucent backgroundColor="transparent" />
+      <ImageBackground
+        source={require('../../../assets/vector_1.png')}
+        style={styles.vector}
+      >
+        {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerChild}>
             <Pressable onPress={() => navigation.goBack()}>
-              <MaterialIcons name='arrow-back-ios' color={'#0D0D26'} size={25} />
+              <Ionicons name="arrow-back" color="#0D0D26" size={26} />
             </Pressable>
             <Text style={styles.headerText}>Settings</Text>
           </View>
         </View>
+
         <View style={styles.content}>
-          <Text style={{ fontFamily: 'Nunito-SemiBold', color: '#95969D', fontSize: wp(4.6), marginVertical: '1%' }}>Applications</Text>
-          <TouchableOpacity style={styles.settingItem} onPress={() => navigation.navigate('UserProfileScreen')}>
-            <View style={styles.settingLeft}>
-              <ProfileIcon />
-              <Text style={styles.settingText}>My Profile</Text>
+
+          {/* ── Account section ── */}
+          <Text style={styles.sectionLabel}>Account</Text>
+
+          <SettingRow
+            icon="person-outline"
+            label="My Profile"
+            onPress={() => navigation.navigate('EditProfileScreen')}
+          />
+          <SettingRow
+            icon="lock-closed-outline"
+            label="Change Password"
+            onPress={() => navigation.navigate('ChangePassword')}
+          />
+
+          {/* ── Preferences section ── */}
+          <Text style={styles.sectionLabel}>Preferences</Text>
+
+          <SettingRow
+            icon="notifications-outline"
+            label="Notifications"
+            right={
+              <Switch
+                trackColor={{ false: '#ddd', true: '#14BA9C' }}
+                thumbColor="#fff"
+                ios_backgroundColor="#ddd"
+                onValueChange={setNotificationsEnabled}
+                value={notificationsEnabled}
+              />
+            }
+          />
+
+          {/* ── Danger zone ── */}
+          <Text style={styles.sectionLabel}>Danger Zone</Text>
+
+          {isDeletingAccount ? (
+            <View style={[styles.settingItem, { justifyContent: 'center' }]}>
+              <ActivityIndicator color="#e74c3c" />
+              <Text style={[styles.settingText, { color: '#e74c3c', marginLeft: 12 }]}>
+                Deleting account...
+              </Text>
             </View>
-          </TouchableOpacity>
-          <View style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <NotificationIcon />
-              <Text style={styles.settingText}>Notifications</Text>
-            </View>
-            <Switch
-              trackColor={{ false: "#767577", true: "#56CD54" }}
-              thumbColor={"#f4f3f4"}
-              ios_backgroundColor="#3e3e3e"
-              onValueChange={toggleSwitch}
-              value={isEnabled}
+          ) : (
+            <SettingRow
+              icon="trash-outline"
+              label="Delete Account"
+              onPress={handleDeleteAccount}
+              danger
             />
-          </View>
-          <TouchableOpacity style={styles.settingItem} onPress={() => navigation.navigate('HelpAndSupport')}>
-            <View style={styles.settingLeft}>
-              <ChangePasswordIcon />
-              <Text style={styles.settingText}>Change Passoword</Text>
-            </View>
-          </TouchableOpacity>
-          {/* <TouchableOpacity style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <LanguageIcon />
-              <Text style={styles.settingText}>Language</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={hp(3.1)} color="#150B3D" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <ThemeIcon />
-              <Text style={styles.settingText}>Theme</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={hp(3.1)} color="#150B3D" />
-          </TouchableOpacity> */}
-          <TouchableOpacity style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <DeleteIcon />
-              <Text style={styles.settingText}>Delete Account</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={hp(3.1)} color="#150B3D" />
-          </TouchableOpacity>
+          )}
 
-
-
-          {/* about  */}
-
-          {/* <View style={{ height: hp(3) }} /> */}
-          {/* <Text style={{ fontFamily: 'Nunito-SemiBold', color: '#95969D', fontSize: wp(4.6), marginVertical: '1%' }}>About</Text>
-          <TouchableOpacity style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <PrivacyIcon />
-              <Text style={styles.settingText}>Privacy</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <TermsAndConditionIcon />
-              <Text style={styles.settingText}>Terms and Conditions</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={hp(3.1)} color="#150B3D" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <HelpCenterIcon />
-              <Text style={styles.settingText}>Help Center</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={hp(3.1)} color="#150B3D" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <SupportIcon />
-              <Text style={styles.settingText}>Support</Text>
-            </View> */}
-          {/* <Ionicons name="chevron-forward" size={hp(3.1)} color="#150B3D" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <AboutIcon />
-              <Text style={styles.settingText}>About</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={hp(3.1)} color="#150B3D" />
-          </TouchableOpacity> */}
           <View style={{ height: hp(8) }} />
         </View>
       </ImageBackground>
-      <ImageBackground source={require('../../../assets/vector_2.png')} style={styles.vector2} />
-    </ScrollView >
-  )
+    </ScrollView>
+  );
 }
 
 const styles = StyleSheet.create({
-  backgroundImage: {
-    flex: 1,
-    resizeMode: "cover"
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  vector: {
-    flex: 1,
-    width: wp(100),
-    height: hp(104),
-  },
-  vector2: {
-    flex: 1,
-    width: wp(100),
-    height: height * 0.5,
-    position: 'absolute',
-    bottom: 0,
-    zIndex: -1,
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
+  vector: { flex: 1, width: wp(100), minHeight: hp(100) },
   header: {
     width: wp(100),
     height: hp(7),
@@ -173,45 +177,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: '5%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
   headerChild: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: wp(35),
-    justifyContent: 'space-between'
+    gap: 12,
   },
   headerText: {
     fontFamily: 'Nunito-Bold',
     fontSize: hp(3.2),
-    textAlign: 'left',
-    color: '#0D0140'
+    color: '#0D0140',
   },
   content: {
     flex: 1,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 16
+    padding: 16,
+  },
+  sectionLabel: {
+    fontFamily: 'Nunito-SemiBold',
+    color: '#95969D',
+    fontSize: wp(4.2),
+    marginTop: hp(2),
+    marginBottom: hp(0.5),
+    marginLeft: 4,
   },
   settingItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: '4%',
-    elevation: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: hp(1.8),
     backgroundColor: '#fff',
-    marginVertical: '2%',
-    borderRadius: 10,
-    paddingHorizontal: '5%'
+    marginVertical: '1%',
+    borderRadius: 12,
+    paddingHorizontal: '4%',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
   },
   settingLeft: {
-    flexDirection: "row",
-    alignItems: "center"
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F4F6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  iconBoxDanger: {
+    backgroundColor: '#FFEBEE',
   },
   settingText: {
-    marginLeft: 16,
     fontSize: hp(2),
     color: '#150B3D',
-    fontFamily: 'DMSans-Regular'
-  }
-})
+    fontFamily: 'Nunito-SemiBold',
+  },
+  settingTextDanger: {
+    color: '#e74c3c',
+  },
+});

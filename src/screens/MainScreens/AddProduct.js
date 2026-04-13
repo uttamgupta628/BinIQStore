@@ -38,7 +38,6 @@ const AddProduct = () => {
   const [upcId, setUpcId] = useState("");
   const [price, setPrice] = useState("");
   const [offerPrice, setOfferPrice] = useState("");
-  const [quantity, setQuantity] = useState("");
   const [imageInner, setImageInner] = useState(null);
   const [imageOuter, setImageOuter] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -88,7 +87,7 @@ const AddProduct = () => {
                     type: asset.type || "image/jpeg",
                   });
                 }
-              }
+              },
             ),
         },
         {
@@ -108,12 +107,12 @@ const AddProduct = () => {
                     type: asset.type || "image/jpeg",
                   });
                 }
-              }
+              },
             ),
         },
         { text: "Cancel", style: "cancel" },
       ],
-      { cancelable: true }
+      { cancelable: true },
     );
   };
 
@@ -124,10 +123,6 @@ const AddProduct = () => {
     }
     if (!description.trim()) {
       Alert.alert("Error", "Please enter a product description.");
-      return;
-    }
-    if (!upcId.trim()) {
-      Alert.alert("Error", "Please enter the UPC ID.");
       return;
     }
     if (!valueCategory) {
@@ -142,10 +137,6 @@ const AddProduct = () => {
       Alert.alert("Error", "Please enter a valid offer price.");
       return;
     }
-    if (!quantity || isNaN(Number(quantity)) || Number(quantity) < 0) {
-      Alert.alert("Error", "Please enter a valid quantity.");
-      return;
-    }
     if (!imageInner) {
       Alert.alert("Error", "Please select an inner product image.");
       return;
@@ -157,28 +148,31 @@ const AddProduct = () => {
 
     setIsLoading(true);
     try {
-      // Step 1: Upload both images to Cloudinary and get permanent public URLs
       let imageInnerUrl, imageOuterUrl;
       try {
         console.log("Uploading images to Cloudinary...");
+        console.log("Selected category_id:", valueCategory);
+        console.log("Categories list:", JSON.stringify(categories));
         [imageInnerUrl, imageOuterUrl] = await uploadMultipleImages(
           [imageInner, imageOuter],
-          "biniq/products"
+          "biniq/products",
         );
         console.log("Images uploaded:", imageInnerUrl, imageOuterUrl);
       } catch (uploadError) {
         console.error("Image upload failed:", uploadError.message);
-        Alert.alert("Upload Error", "Failed to upload images. Please try again.");
+        Alert.alert(
+          "Upload Error",
+          "Failed to upload images. Please try again.",
+        );
         setIsLoading(false);
         return;
       }
 
-      // Step 2: Send plain JSON with real Cloudinary URLs to backend
       const payload = {
         category_id: valueCategory,
         title: title.trim(),
         description: description.trim(),
-        upc_id: upcId.trim(),
+        ...(upcId.trim() && { upc_id: upcId.trim() }),
         price: Number(price),
         type: Number(valueAddType),
         image_inner: imageInnerUrl,
@@ -198,7 +192,6 @@ const AddProduct = () => {
             setUpcId("");
             setPrice("");
             setOfferPrice("");
-            setQuantity("");
             setValueCategory(null);
             setImageInner(null);
             setImageOuter(null);
@@ -208,19 +201,19 @@ const AddProduct = () => {
       ]);
     } catch (error) {
       console.error("Add product error:", error.message);
-      const message =
-        Array.isArray(error.response?.data?.errors)
-          ? error.response.data.errors.map((e) => e.msg).join("\n")
-          : error.response?.data?.message ||
-            error.message ||
-            "Failed to add product";
+      console.error("Response data:", JSON.stringify(error.response?.data));
+      console.error("Payload sent:", JSON.stringify(payload));
+      const message = Array.isArray(error.response?.data?.errors)
+        ? error.response.data.errors.map((e) => e.msg).join("\n")
+        : error.response?.data?.message ||
+          error.message ||
+          "Failed to add product";
       Alert.alert("Error", message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Reusable image upload box component
   const ImagePickerBox = ({ label, image, onPress }) => (
     <>
       <Text style={styles.label}>{label}</Text>
@@ -253,7 +246,11 @@ const AddProduct = () => {
         <View style={styles.header}>
           <View style={styles.headerChild}>
             <Pressable onPress={() => navigation.goBack()}>
-              <MaterialIcons name="arrow-back-ios" color={"#0D0D26"} size={25} />
+              <MaterialIcons
+                name="arrow-back-ios"
+                color={"#0D0D26"}
+                size={25}
+              />
             </Pressable>
             <Text style={styles.headerText}>Add Product</Text>
           </View>
@@ -262,7 +259,6 @@ const AddProduct = () => {
         <View style={styles.spacer} />
 
         <View style={styles.sectionContainer}>
-
           <Text style={styles.label}>Title</Text>
           <View style={styles.inputContainer}>
             <TextInput
@@ -285,7 +281,7 @@ const AddProduct = () => {
             />
           </View>
 
-          <Text style={styles.label}>UPC ID</Text>
+          <Text style={styles.label}>UPC ID (Optional)</Text>
           <View style={styles.inputContainer}>
             <TextInput
               placeholder="Enter UPC barcode ID"
@@ -316,7 +312,9 @@ const AddProduct = () => {
                 setValue={setValueCategory}
                 setItems={setCategories}
                 placeholder={
-                  categories.length === 0 ? "No categories available" : "Select category"
+                  categories.length === 0
+                    ? "No categories available"
+                    : "Select category"
                 }
                 style={styles.dropdown}
                 textStyle={styles.dropdownText}
@@ -325,8 +323,22 @@ const AddProduct = () => {
                   <SimpleLineIcons name="arrow-down" size={20} color="#000" />
                 )}
                 onSelectItem={() => setOpenCategory(false)}
-                dropDownMaxHeight={hp(40)}
-                scrollViewProps={{ showsVerticalScrollIndicator: true }}
+                listMode="MODAL"
+                modalProps={{ animationType: "slide" }}
+                modalContentContainerStyle={{
+                  paddingHorizontal: 20,
+                  paddingTop: 20,
+                  backgroundColor: "#fff",
+                }}
+                searchable={true}
+                searchPlaceholder="Search category..."
+                searchTextInputStyle={{
+                  borderColor: "#524B6B",
+                  borderRadius: 8,
+                  fontFamily: "Nunito-Regular",
+                  fontSize: hp(2),
+                  color: "#000",
+                }}
                 disabled={categories.length === 0}
               />
             )}
@@ -356,18 +368,6 @@ const AddProduct = () => {
             />
           </View>
 
-          <Text style={styles.label}>Quantity</Text>
-          <View style={styles.inputContainer}>
-            <TextInput
-              placeholder="Enter quantity"
-              value={quantity}
-              onChangeText={setQuantity}
-              style={styles.inputText}
-              placeholderTextColor={"#999"}
-              keyboardType="numeric"
-            />
-          </View>
-
           <ImagePickerBox
             label="Inner Product Image"
             image={imageInner}
@@ -379,7 +379,6 @@ const AddProduct = () => {
             image={imageOuter}
             onPress={() => pickImage(setImageOuter)}
           />
-
         </View>
 
         <TouchableOpacity

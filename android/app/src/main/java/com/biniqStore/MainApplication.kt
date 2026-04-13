@@ -1,4 +1,4 @@
-package com.biniqStore
+package com.binIQstore
 
 import android.app.Application
 import com.facebook.react.PackageList

@@ -30,20 +30,21 @@ import { uploadImageToCloudinary } from "../../store/cloudinaryUpload";
 
 const NewPromotionScreen = () => {
   const navigation = useNavigation();
-  const { fetchCategories, addPromotion } = useStore();
+  const { fetchCategories, addPromotion, accessToken } = useStore();
 
   // Form fields
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [upcId, setUpcId] = useState("");
   const [price, setPrice] = useState("");
-  const [bannerImage, setBannerImage] = useState(null);     // local URI for preview
-  const [bannerImageUrl, setBannerImageUrl] = useState(null); // Cloudinary URL for save
+  const [bannerImage, setBannerImage] = useState(null);
+  const [bannerImageUrl, setBannerImageUrl] = useState(null);
 
   // Dropdowns
   const [openCategory, setOpenCategory] = useState(false);
   const [valueCategory, setValueCategory] = useState(null);
   const [categories, setCategories] = useState([]);
+  const [isCategoriesLoading, setIsCategoriesLoading] = useState(false);
 
   const [openStatus, setOpenStatus] = useState(false);
   const [valueStatus, setValueStatus] = useState("Active");
@@ -61,7 +62,9 @@ const NewPromotionScreen = () => {
 
   // Date pickers
   const [startDate, setStartDate] = useState(new Date());
-  const [endDate, setEndDate] = useState(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)); // +7 days
+  const [endDate, setEndDate] = useState(
+    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  );
   const [showStartDate, setShowStartDate] = useState(false);
   const [showEndDate, setShowEndDate] = useState(false);
 
@@ -69,16 +72,21 @@ const NewPromotionScreen = () => {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   useEffect(() => {
+    if (!accessToken) return;
     const loadCategories = async () => {
+      setIsCategoriesLoading(true);
       try {
         const cats = await fetchCategories();
         setCategories(cats);
       } catch (error) {
         console.error("Error loading categories:", error.message);
+        Alert.alert("Error", "Failed to load categories. Please try again.");
+      } finally {
+        setIsCategoriesLoading(false);
       }
     };
     loadCategories();
-  }, []);
+  }, [accessToken]);
 
   const handleImagePick = () => {
     Alert.alert(
@@ -90,7 +98,7 @@ const NewPromotionScreen = () => {
           onPress: () =>
             launchCamera(
               { mediaType: "photo", maxWidth: 800, maxHeight: 600 },
-              (response) => handleImageResponse(response)
+              (response) => handleImageResponse(response),
             ),
         },
         {
@@ -98,12 +106,12 @@ const NewPromotionScreen = () => {
           onPress: () =>
             launchImageLibrary(
               { mediaType: "photo", maxWidth: 800, maxHeight: 600 },
-              (response) => handleImageResponse(response)
+              (response) => handleImageResponse(response),
             ),
         },
         { text: "Cancel", style: "cancel" },
       ],
-      { cancelable: true }
+      { cancelable: true },
     );
   };
 
@@ -112,7 +120,7 @@ const NewPromotionScreen = () => {
     if (!response.assets || !response.assets[0]) return;
 
     const asset = response.assets[0];
-    setBannerImage(asset.uri); // show preview immediately
+    setBannerImage(asset.uri);
 
     setIsUploadingImage(true);
     try {
@@ -121,7 +129,10 @@ const NewPromotionScreen = () => {
         fileName: asset.fileName || `promotion_${Date.now()}.jpg`,
         type: asset.type || "image/jpeg",
       };
-      const cloudinaryUrl = await uploadImageToCloudinary(imageFile, "biniq/promotions");
+      const cloudinaryUrl = await uploadImageToCloudinary(
+        imageFile,
+        "biniq/promotions",
+      );
       setBannerImageUrl(cloudinaryUrl);
       console.log("Banner uploaded:", cloudinaryUrl);
     } catch (error) {
@@ -134,23 +145,42 @@ const NewPromotionScreen = () => {
     }
   };
 
-  const formatDate = (date) => date.toISOString().split("T")[0]; // YYYY-MM-DD display
   const formatDateDisplay = (date) =>
-    date.toLocaleDateString([], { year: "numeric", month: "short", day: "2-digit" });
+    date.toLocaleDateString([], {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    });
 
   const handleAddPromotion = async () => {
-    // Validate all required fields
-    if (!title.trim()) { Alert.alert("Error", "Title is required."); return; }
-    if (!description.trim()) { Alert.alert("Error", "Description is required."); return; }
-    if (!upcId.trim()) { Alert.alert("Error", "UPC ID is required."); return; }
-    if (!price || isNaN(Number(price)) || Number(price) < 0) { Alert.alert("Error", "Enter a valid price."); return; }
-    if (!valueCategory) { Alert.alert("Error", "Please select a category."); return; }
-    if (!bannerImageUrl) {
-      if (isUploadingImage) { Alert.alert("Please wait", "Image is still uploading..."); }
-      else { Alert.alert("Error", "Please select a banner image."); }
+    if (!title.trim()) {
+      Alert.alert("Error", "Title is required.");
       return;
     }
-    if (endDate <= startDate) { Alert.alert("Error", "End date must be after start date."); return; }
+    if (!description.trim()) {
+      Alert.alert("Error", "Description is required.");
+      return;
+    }
+    if (!price || isNaN(Number(price)) || Number(price) < 0) {
+      Alert.alert("Error", "Enter a valid price.");
+      return;
+    }
+    if (!valueCategory) {
+      Alert.alert("Error", "Please select a category.");
+      return;
+    }
+    if (!bannerImageUrl) {
+      if (isUploadingImage) {
+        Alert.alert("Please wait", "Image is still uploading...");
+      } else {
+        Alert.alert("Error", "Please select a banner image.");
+      }
+      return;
+    }
+    if (endDate <= startDate) {
+      Alert.alert("Error", "End date must be after start date.");
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -158,38 +188,41 @@ const NewPromotionScreen = () => {
         category_id: valueCategory,
         title: title.trim(),
         description: description.trim(),
-        upc_id: upcId.trim(),
+        ...(upcId.trim() && { upc_id: upcId.trim() }),
         price: Number(price),
-        status: valueStatus,           // "Active" | "Inactive"
-        visibility: valueVisibility,   // "On" | "Off"
+        status: valueStatus,
+        visibility: valueVisibility,
         start_date: startDate.toISOString(),
         end_date: endDate.toISOString(),
-        banner_image: bannerImageUrl,  // Cloudinary URL
+        banner_image: bannerImageUrl,
       };
 
       console.log("Creating promotion:", payload);
       const response = await addPromotion(payload);
 
-      Alert.alert("Success", response.message || "Promotion created successfully!", [
-        {
-          text: "OK",
-          onPress: () => {
-            // Reset form
-            setTitle("");
-            setDescription("");
-            setUpcId("");
-            setPrice("");
-            setValueCategory(null);
-            setValueStatus("Active");
-            setValueVisibility("On");
-            setStartDate(new Date());
-            setEndDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
-            setBannerImage(null);
-            setBannerImageUrl(null);
-            navigation.goBack();
+      Alert.alert(
+        "Success",
+        response.message || "Promotion created successfully!",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              setTitle("");
+              setDescription("");
+              setUpcId("");
+              setPrice("");
+              setValueCategory(null);
+              setValueStatus("Active");
+              setValueVisibility("On");
+              setStartDate(new Date());
+              setEndDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+              setBannerImage(null);
+              setBannerImageUrl(null);
+              navigation.goBack();
+            },
           },
-        },
-      ]);
+        ],
+      );
     } catch (error) {
       console.error("Add promotion error:", error.message);
       const errData = error.response?.data;
@@ -261,7 +294,7 @@ const NewPromotionScreen = () => {
           </View>
 
           {/* UPC ID */}
-          <Text style={styles.label}>UPC ID *</Text>
+          <Text style={styles.label}>UPC ID (Optional)</Text>
           <View style={styles.inputContainer}>
             <TextInput
               placeholder="e.g. PROMO-2026-001"
@@ -288,21 +321,55 @@ const NewPromotionScreen = () => {
           {/* Category */}
           <Text style={styles.label}>Category *</Text>
           <View style={[styles.dropdownContainer, { zIndex: 700 }]}>
-            <DropDownPicker
-              open={openCategory}
-              value={valueCategory}
-              items={categories}
-              setOpen={(val) => { setOpenCategory(val); setOpenStatus(false); setOpenVisibility(false); }}
-              setValue={setValueCategory}
-              setItems={setCategories}
-              placeholder="Select category"
-              style={styles.dropdown}
-              textStyle={styles.dropdownText}
-              dropDownContainerStyle={[styles.dropdownContainerStyle, { maxHeight: hp(6.5) * 4 }]}
-              scrollable
-              ArrowDownIconComponent={() => <SimpleLineIcons name="arrow-down" size={20} color="#000" />}
-              onSelectItem={() => setOpenCategory(false)}
-            />
+            {isCategoriesLoading ? (
+              <ActivityIndicator
+                size="small"
+                color="#130160"
+                style={{ marginVertical: hp(1) }}
+              />
+            ) : (
+              <DropDownPicker
+                open={openCategory}
+                value={valueCategory}
+                items={categories}
+                setOpen={(val) => {
+                  setOpenCategory(val);
+                  setOpenStatus(false);
+                  setOpenVisibility(false);
+                }}
+                setValue={setValueCategory}
+                setItems={setCategories}
+                placeholder={
+                  categories.length === 0
+                    ? "No categories available"
+                    : "Select category"
+                }
+                style={styles.dropdown}
+                textStyle={styles.dropdownText}
+                dropDownContainerStyle={styles.dropdownContainerStyle}
+                ArrowDownIconComponent={() => (
+                  <SimpleLineIcons name="arrow-down" size={20} color="#000" />
+                )}
+                onSelectItem={() => setOpenCategory(false)}
+                listMode="MODAL"
+                modalProps={{ animationType: "slide" }}
+                modalContentContainerStyle={{
+                  paddingHorizontal: 20,
+                  paddingTop: 20,
+                  backgroundColor: "#fff",
+                }}
+                searchable={true}
+                searchPlaceholder="Search category..."
+                searchTextInputStyle={{
+                  borderColor: "#524B6B",
+                  borderRadius: 8,
+                  fontFamily: "Nunito-Regular",
+                  fontSize: hp(2),
+                  color: "#000",
+                }}
+                disabled={categories.length === 0}
+              />
+            )}
           </View>
 
           {/* Status */}
@@ -312,13 +379,19 @@ const NewPromotionScreen = () => {
               open={openStatus}
               value={valueStatus}
               items={statusOptions}
-              setOpen={(val) => { setOpenStatus(val); setOpenCategory(false); setOpenVisibility(false); }}
+              setOpen={(val) => {
+                setOpenStatus(val);
+                setOpenCategory(false);
+                setOpenVisibility(false);
+              }}
               setValue={setValueStatus}
               placeholder="Select status"
               style={styles.dropdown}
               textStyle={styles.dropdownText}
               dropDownContainerStyle={styles.dropdownContainerStyle}
-              ArrowDownIconComponent={() => <SimpleLineIcons name="arrow-down" size={20} color="#000" />}
+              ArrowDownIconComponent={() => (
+                <SimpleLineIcons name="arrow-down" size={20} color="#000" />
+              )}
               onSelectItem={() => setOpenStatus(false)}
             />
           </View>
@@ -330,20 +403,29 @@ const NewPromotionScreen = () => {
               open={openVisibility}
               value={valueVisibility}
               items={visibilityOptions}
-              setOpen={(val) => { setOpenVisibility(val); setOpenCategory(false); setOpenStatus(false); }}
+              setOpen={(val) => {
+                setOpenVisibility(val);
+                setOpenCategory(false);
+                setOpenStatus(false);
+              }}
               setValue={setValueVisibility}
               placeholder="Select visibility"
               style={styles.dropdown}
               textStyle={styles.dropdownText}
               dropDownContainerStyle={styles.dropdownContainerStyle}
-              ArrowDownIconComponent={() => <SimpleLineIcons name="arrow-down" size={20} color="#000" />}
+              ArrowDownIconComponent={() => (
+                <SimpleLineIcons name="arrow-down" size={20} color="#000" />
+              )}
               onSelectItem={() => setOpenVisibility(false)}
             />
           </View>
 
           {/* Start Date */}
           <Text style={styles.label}>Start Date *</Text>
-          <TouchableOpacity style={styles.dateButton} onPress={() => setShowStartDate(true)}>
+          <TouchableOpacity
+            style={styles.dateButton}
+            onPress={() => setShowStartDate(true)}
+          >
             <MaterialIcons name="calendar-today" size={18} color="#524B6B" />
             <Text style={styles.dateText}>{formatDateDisplay(startDate)}</Text>
           </TouchableOpacity>
@@ -362,7 +444,10 @@ const NewPromotionScreen = () => {
 
           {/* End Date */}
           <Text style={styles.label}>End Date *</Text>
-          <TouchableOpacity style={styles.dateButton} onPress={() => setShowEndDate(true)}>
+          <TouchableOpacity
+            style={styles.dateButton}
+            onPress={() => setShowEndDate(true)}
+          >
             <MaterialIcons name="calendar-today" size={18} color="#524B6B" />
             <Text style={styles.dateText}>{formatDateDisplay(endDate)}</Text>
           </TouchableOpacity>
@@ -381,10 +466,17 @@ const NewPromotionScreen = () => {
 
           {/* Banner Image */}
           <Text style={styles.label}>Banner Image *</Text>
-          <TouchableOpacity style={styles.bannerContainer} onPress={handleImagePick}>
+          <TouchableOpacity
+            style={styles.bannerContainer}
+            onPress={handleImagePick}
+          >
             {bannerImage ? (
               <View style={{ width: "100%", height: "100%" }}>
-                <Image source={{ uri: bannerImage }} style={styles.bannerImage} resizeMode="cover" />
+                <Image
+                  source={{ uri: bannerImage }}
+                  style={styles.bannerImage}
+                  resizeMode="cover"
+                />
                 {isUploadingImage && (
                   <View style={styles.uploadOverlay}>
                     <ActivityIndicator color="#fff" size="large" />
@@ -395,7 +487,9 @@ const NewPromotionScreen = () => {
             ) : (
               <View style={styles.bannerPlaceholder}>
                 <Upload_Photo_Icon width="40%" height="40%" />
-                <Text style={styles.bannerPlaceholderText}>Tap to upload banner</Text>
+                <Text style={styles.bannerPlaceholderText}>
+                  Tap to upload banner
+                </Text>
               </View>
             )}
           </TouchableOpacity>
@@ -403,7 +497,10 @@ const NewPromotionScreen = () => {
 
         {/* Submit Button */}
         <TouchableOpacity
-          style={[styles.loginButton, (isLoading || isUploadingImage) && styles.disabledButton]}
+          style={[
+            styles.loginButton,
+            (isLoading || isUploadingImage) && styles.disabledButton,
+          ]}
           onPress={handleAddPromotion}
           disabled={isLoading || isUploadingImage}
         >
@@ -426,31 +523,140 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   scrollContent: { flexGrow: 1 },
   vector: { width: wp(100), minHeight: hp(100) },
-  header: { width: wp(100), height: hp(7), marginTop: "10%", paddingHorizontal: "5%", flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  header: {
+    width: wp(100),
+    height: hp(7),
+    marginTop: "10%",
+    paddingHorizontal: "5%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   headerChild: { flexDirection: "row", alignItems: "center" },
-  headerText: { fontFamily: "Nunito-Bold", fontSize: hp(3), textAlign: "left", color: "#0D0140", marginLeft: hp(1) },
+  headerText: {
+    fontFamily: "Nunito-Bold",
+    fontSize: hp(3),
+    textAlign: "left",
+    color: "#0D0140",
+    marginLeft: hp(1),
+  },
   sectionContainer: { paddingHorizontal: "5%" },
-  sectionTitle: { fontFamily: "Nunito-Bold", fontSize: hp(2.8), color: "#14BA9C" },
-  sectionSubtitle: { color: "#524B6B", fontFamily: "Nunito-SemiBold", fontSize: hp(1.7), marginTop: "2%" },
-  sectionHeader: { color: "#000", fontFamily: "Nunito-SemiBold", fontSize: hp(1.9), marginTop: "2%" },
+  sectionTitle: {
+    fontFamily: "Nunito-Bold",
+    fontSize: hp(2.8),
+    color: "#14BA9C",
+  },
+  sectionSubtitle: {
+    color: "#524B6B",
+    fontFamily: "Nunito-SemiBold",
+    fontSize: hp(1.7),
+    marginTop: "2%",
+  },
+  sectionHeader: {
+    color: "#000",
+    fontFamily: "Nunito-SemiBold",
+    fontSize: hp(1.9),
+    marginTop: "2%",
+  },
   spacer: { height: hp(2) },
-  label: { color: "black", fontFamily: "Nunito-SemiBold", fontSize: hp(1.7), marginTop: "3%" },
-  inputContainer: { backgroundColor: "#fff", width: "100%", height: hp(6.5), borderRadius: 8, marginVertical: "2%", paddingHorizontal: "5%", justifyContent: "center", borderWidth: 0.4, borderColor: "#524B6B" },
+  label: {
+    color: "black",
+    fontFamily: "Nunito-SemiBold",
+    fontSize: hp(1.7),
+    marginTop: "3%",
+  },
+  inputContainer: {
+    backgroundColor: "#fff",
+    width: "100%",
+    height: hp(6.5),
+    borderRadius: 8,
+    marginVertical: "2%",
+    paddingHorizontal: "5%",
+    justifyContent: "center",
+    borderWidth: 0.4,
+    borderColor: "#524B6B",
+  },
   inputText: { fontFamily: "Nunito-Regular", color: "#000", fontSize: hp(2.2) },
   dropdownContainer: { width: "100%", marginVertical: "2%" },
-  dropdown: { backgroundColor: "#fff", borderColor: "#524B6B", borderRadius: 8, borderWidth: 0.4 },
-  dropdownText: { fontFamily: "Nunito-Regular", fontSize: hp(2.2), color: "#000" },
+  dropdown: {
+    backgroundColor: "#fff",
+    borderColor: "#524B6B",
+    borderRadius: 8,
+    borderWidth: 0.4,
+  },
+  dropdownText: {
+    fontFamily: "Nunito-Regular",
+    fontSize: hp(2.2),
+    color: "#000",
+  },
   dropdownContainerStyle: { borderColor: "#524B6B", backgroundColor: "#fff" },
-  dateButton: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", width: "100%", height: hp(6.5), borderRadius: 8, marginVertical: "2%", paddingHorizontal: "5%", borderWidth: 0.4, borderColor: "#524B6B", gap: 8 },
+  dateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    width: "100%",
+    height: hp(6.5),
+    borderRadius: 8,
+    marginVertical: "2%",
+    paddingHorizontal: "5%",
+    borderWidth: 0.4,
+    borderColor: "#524B6B",
+    gap: 8,
+  },
   dateText: { fontFamily: "Nunito-Regular", color: "#000", fontSize: hp(2.2) },
-  bannerContainer: { backgroundColor: "#fff", width: "100%", height: hp(23), borderRadius: 8, marginVertical: "2%", borderWidth: 0.4, borderColor: "#524B6B", overflow: "hidden" },
+  bannerContainer: {
+    backgroundColor: "#fff",
+    width: "100%",
+    height: hp(23),
+    borderRadius: 8,
+    marginVertical: "2%",
+    borderWidth: 0.4,
+    borderColor: "#524B6B",
+    overflow: "hidden",
+  },
   bannerImage: { width: "100%", height: "100%", borderRadius: 8 },
-  bannerPlaceholder: { flex: 1, alignItems: "center", justifyContent: "center" },
-  bannerPlaceholderText: { fontFamily: "Nunito-Regular", color: "#999", fontSize: hp(1.8), marginTop: hp(1) },
-  uploadOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" },
-  uploadOverlayText: { color: "#fff", fontFamily: "Nunito-SemiBold", fontSize: hp(2), marginTop: 8 },
-  loginButton: { backgroundColor: "#130160", width: "90%", height: hp(7), borderRadius: 10, justifyContent: "center", alignItems: "center", alignSelf: "center", marginTop: hp(2) },
+  bannerPlaceholder: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bannerPlaceholderText: {
+    fontFamily: "Nunito-Regular",
+    color: "#999",
+    fontSize: hp(1.8),
+    marginTop: hp(1),
+  },
+  uploadOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  uploadOverlayText: {
+    color: "#fff",
+    fontFamily: "Nunito-SemiBold",
+    fontSize: hp(2),
+    marginTop: 8,
+  },
+  loginButton: {
+    backgroundColor: "#130160",
+    width: "90%",
+    height: hp(7),
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "center",
+    marginTop: hp(2),
+  },
   disabledButton: { opacity: 0.6 },
-  loginButtonText: { fontFamily: "Nunito-SemiBold", color: "#fff", fontSize: hp(2.5) },
+  loginButtonText: {
+    fontFamily: "Nunito-SemiBold",
+    color: "#fff",
+    fontSize: hp(2.5),
+  },
   bottomSpacer: { height: hp(5) },
 });
